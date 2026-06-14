@@ -195,12 +195,6 @@
   }
   .bubble b { color:#c0202a; }
   .bubble .fix { color:#0a8f3c; }
-  .patchlog { /* 패치 적용 로그 (구버전 → 신버전) */
-    font-size:12px; background:#0a0e1a; border:2px solid #2a3550;
-    padding:8px 14px; color:#8a93a5; line-height:1.8; letter-spacing:1px;
-  }
-  .patchlog .old { color:var(--danger); text-decoration: line-through; }
-  .patchlog .new { color:var(--pipe-on); font-weight:bold; }
   .scene-tag { color:#ffd000; font-size:12px; letter-spacing:2px; }
 
   /* ---------- 인트로 목표 화면 ---------- */
@@ -248,13 +242,13 @@
     padding:7px 2px; font-size:12.5px; line-height:1.45; color:#222;
   }
   .cl-item + .cl-item { border-top:1px dashed #c8cdc4; }
-  /* 체크박스: 빈 네모 → 체크 시 ✓ */
+  /* 체크박스: 빈 네모 → 성공 시 ✓ / 실패 시 ✗ */
   .cl-box {
     position:relative; flex:0 0 auto; width:16px; height:16px; margin-top:1px;
     border:2px solid #555; border-radius:2px; background:#fff;
     transition: border-color .2s;
   }
-  .cl-box::after { /* 체크 표시 (마커로 그은 느낌) */
+  .cl-box::after { /* 성공 체크 ✓ */
     content:""; position:absolute; left:2px; top:-3px;
     width:7px; height:12px; border:solid #0a8f3c;
     border-width:0 3px 3px 0; transform: rotate(45deg) scale(0);
@@ -264,22 +258,40 @@
   .cl-item.done .cl-box::after { animation: checkPop .3s cubic-bezier(.2,2,.4,1) .1s forwards; }
   @keyframes checkPop { to { transform: rotate(45deg) scale(1); } }
 
+  /* 실패 ✗ (빨강 X) */
+  .cl-item.failed .cl-box { border-color:var(--danger); }
+  .cl-item.failed .cl-box::before,
+  .cl-item.failed .cl-box::after {
+    content:""; position:absolute; left:50%; top:50%; width:3px; height:18px;
+    background:var(--danger); border-radius:2px; transform-origin:center;
+  }
+  .cl-item.failed .cl-box::before { animation: xMark1 .28s cubic-bezier(.2,2,.4,1) .1s forwards; }
+  .cl-item.failed .cl-box::after  { border:none; animation: xMark2 .28s cubic-bezier(.2,2,.4,1) .18s forwards; }
+  @keyframes xMark1 { from { transform:translate(-50%,-50%) rotate(45deg) scaleY(0);} to { transform:translate(-50%,-50%) rotate(45deg) scaleY(1);} }
+  @keyframes xMark2 { from { transform:translate(-50%,-50%) rotate(-45deg) scaleY(0);} to { transform:translate(-50%,-50%) rotate(-45deg) scaleY(1);} }
+
   .cl-txt b { color:#1a3a8f; }
   .cl-sub { color:#888; font-size:11px; }
   .cl-item.done .cl-txt { color:#0a8f3c; }
   .cl-item.done .cl-txt b { color:#0a8f3c; }
-  /* 마커 줄긋기: 좌→우로 그어짐 (살짝 비뚤게) */
+  .cl-item.failed .cl-txt { color:#b53030; }
+  .cl-item.failed .cl-txt b { color:#b53030; }
+  /* 마커 줄긋기: 좌→우로 그어짐 (살짝 비뚤게). 성공=초록 / 실패=빨강 */
   .cl-strike {
     position:absolute; left:27px; right:6px; top:50%;
-    height:3px; background:#0a8f3c; border-radius:2px;
+    height:3px; border-radius:2px;
     transform: scaleX(0) rotate(-.8deg); transform-origin:left center;
-    box-shadow:0 0 1px #0a8f3c; pointer-events:none; opacity:.92;
+    pointer-events:none; opacity:.92;
   }
-  .cl-item.done .cl-strike { animation: strikeIn .45s ease-out forwards; }
+  .cl-item.done .cl-strike   { background:#0a8f3c; box-shadow:0 0 1px #0a8f3c; animation: strikeIn .45s ease-out forwards; }
+  .cl-item.failed .cl-strike { background:var(--danger); box-shadow:0 0 1px var(--danger); animation: strikeIn .45s ease-out .12s forwards; }
   @keyframes strikeIn { from { transform: scaleX(0) rotate(-.8deg); } to { transform: scaleX(1) rotate(-.8deg); } }
-  /* instant: 이전에 이미 완료된 항목은 애니메이션 없이 즉시 완료 상태로 */
+  /* instant: 이전에 이미 처리된 항목은 애니메이션 없이 즉시 완료 상태로 */
   .cl-item.done.instant .cl-box::after { animation:none; transform: rotate(45deg) scale(1); }
   .cl-item.done.instant .cl-strike { animation:none; transform: scaleX(1) rotate(-.8deg); }
+  .cl-item.failed.instant .cl-box::before { animation:none; transform:translate(-50%,-50%) rotate(45deg) scaleY(1); }
+  .cl-item.failed.instant .cl-box::after  { animation:none; transform:translate(-50%,-50%) rotate(-45deg) scaleY(1); }
+  .cl-item.failed.instant .cl-strike { animation:none; transform: scaleX(1) rotate(-.8deg); }
 
   .goal-note { color:#cdd6ea; font-size:12px; line-height:1.6; max-width:290px; }
   .goal-note b { color:var(--pipe-on); }
@@ -294,19 +306,26 @@
     border-right:2px solid var(--bevel-light); border-bottom:2px solid var(--bevel-light);
   }
 
+  /* 결과 화면: 체크리스트 보드 + 우측 하단 등급 도장 */
+  .wb-result { position:relative; padding-bottom:34px; }
   .stamp {
-    font-size:64px; font-weight:900; line-height:1;
-    border:6px solid; border-radius:10px; padding:8px 24px;
-    transform: rotate(-8deg) scale(0);
-    animation: stampIn .35s cubic-bezier(.2,2.2,.4,1) forwards;
+    font-size:48px; font-weight:900; line-height:1;
+    border:5px solid; border-radius:10px; padding:4px 16px;
+    transform: rotate(-12deg) scale(0);
+    animation: stampIn .35s cubic-bezier(.2,2.2,.4,1) .5s forwards;
+    background: rgba(255,255,255,.72);
   }
-  @keyframes stampIn { to { transform: rotate(-8deg) scale(1); } }
-  .stamp.A { color:#3dff7e; border-color:#3dff7e; text-shadow:0 0 18px #3dff7e88; }
-  .stamp.B { color:#5ab4ff; border-color:#5ab4ff; }
-  .stamp.C { color:#ffc24d; border-color:#ffc24d; }
+  /* 결과 보드 안에서는 우측 하단에 결재 도장처럼 */
+  .wb-result .stamp {
+    position:absolute; right:-6px; bottom:-2px; z-index:3;
+  }
+  @keyframes stampIn { to { transform: rotate(-12deg) scale(1); } }
+  .stamp.A { color:#0a8f3c; border-color:#0a8f3c; text-shadow:0 0 10px #3dff7e55; }
+  .stamp.B { color:#1f6fd0; border-color:#1f6fd0; }
+  .stamp.C { color:#d68a00; border-color:#d68a00; }
   .stamp.F { color:var(--danger); border-color:var(--danger); }
-  .result-sub { color:#cdd6ea; font-size:13px; line-height:1.7; max-width:290px; }
-  .result-sub .narr { display:block; margin-top:8px; color:#8a93a5; font-size:12px; font-style:italic; }
+  .result-sub { color:#fff; font-size:14px; line-height:1.7; max-width:300px; font-weight:bold; }
+  .result-sub .narr { display:block; margin-top:8px; color:#aab4c8; font-size:12px; font-style:italic; font-weight:normal; }
 
   .flash { animation: boardFlash .45s; }
   @keyframes boardFlash { 0%,100%{filter:none;} 40%{filter:brightness(2.2) saturate(1.4);} }
@@ -358,14 +377,13 @@
         <div class="wb-tray"><span class="marker mk-r"></span><span class="marker mk-b"></span><span class="marker mk-k"></span></div>
       </div>
 
-      <div class="goal-note">회선을 복구할 때마다 항목이 <b>위에서부터</b> 하나씩 수정된다.<br>
+      <div class="goal-note">회선 <b>3개</b>가 위 작업 <b>3개</b>와 차례로 연결돼 있다.<br>
         파이프를 <b>탭해서 돌려</b> IN→서버를 연결하라!</div>
       <button class="btn98" id="btnStart">복구 시작 ▶</button>
     </div>
 
-    <!-- 보드 클리어 막간 (화이트보드에 체크 줄긋기 연출) -->
+    <!-- 보드 클리어 막간 (화이트보드에 ✓/✗ 줄긋기 연출) -->
     <div class="overlay hidden" id="ovNext">
-      <div class="patchlog" id="patchLog"></div>
       <div class="whiteboard">
         <div class="wb-title">Y2K 긴급 패치 작업 목록</div>
         <div class="checklist" id="nextList">
@@ -379,9 +397,18 @@
       <button class="btn98" id="btnNext">다음 회선 ▶</button>
     </div>
 
-    <!-- 결과 -->
+    <!-- 결과: 체크리스트 보드 재등장 + 우측 하단 등급 도장 + 남강산 대사 -->
     <div class="overlay hidden" id="ovResult">
-      <div class="stamp" id="stampEl">A</div>
+      <div class="whiteboard wb-result">
+        <div class="wb-title">Y2K 긴급 패치 작업 목록</div>
+        <div class="checklist" id="resultList">
+          <div class="cl-item" data-task="1"><span class="cl-box"></span><span class="cl-txt">연도 표기 <b>2자리 → 4자리</b> 변환 <span class="cl-sub">(YY → YYYY)</span></span><span class="cl-strike"></span></div>
+          <div class="cl-item" data-task="2"><span class="cl-box"></span><span class="cl-txt">날짜 연산 모듈 <b>오류 수정</b> <span class="cl-sub">(ERR → OK)</span></span><span class="cl-strike"></span></div>
+          <div class="cl-item" data-task="3"><span class="cl-box"></span><span class="cl-txt">전 시스템 <b>패치 전송 및 적용</b> <span class="cl-sub">(전송 완료)</span></span><span class="cl-strike"></span></div>
+        </div>
+        <div class="wb-tray"><span class="marker mk-r"></span><span class="marker mk-b"></span><span class="marker mk-k"></span></div>
+        <div class="stamp" id="stampEl">A</div>
+      </div>
       <div class="result-sub" id="resultMsg"></div>
       <button class="btn98" id="btnRetry">다시 복구하기 ↺</button>
     </div>
@@ -720,6 +747,7 @@ const PipeGame = {
   boardIdx: 0,
   timeLeft: 0,
   cleared: 0,
+  results: [],   // 각 판 결과 기록: true(성공)/false(실패), 인덱스 = 판 번호
   ticking: null,
   locked: true,
   onGameEnd: grade => console.log('[PipeGame] grade =', grade), // ★ 스토리 엔진 연동 지점
@@ -735,7 +763,6 @@ const PipeGame = {
     ovIntro: document.getElementById('ovIntro'),
     ovNext:  document.getElementById('ovNext'),
     nextMsg: document.getElementById('nextMsg'),
-    patchLog: document.getElementById('patchLog'),
     ovResult: document.getElementById('ovResult'),
     stamp:    document.getElementById('stampEl'),
     resultMsg: document.getElementById('resultMsg'),
@@ -746,11 +773,12 @@ const PipeGame = {
   start() {
     this.boardIdx = 0;
     this.cleared = 0;
+    this.results = [];
     this.locked = false;
     SysDate.set(0);
-    // 인트로/막간 체크리스트 초기화 (다시 복구하기 눌렀을 때 대비)
-    document.querySelectorAll('#introList .cl-item, #nextList .cl-item')
-      .forEach(el => el.classList.remove('done', 'instant'));
+    // 인트로/막간/결과 체크리스트 초기화 (다시 복구하기 눌렀을 때 대비)
+    document.querySelectorAll('#introList .cl-item, #nextList .cl-item, #resultList .cl-item')
+      .forEach(el => el.classList.remove('done', 'failed', 'instant'));
     this.els.ovIntro.classList.add('hidden');
     this.els.ovResult.classList.add('hidden');
     this.beginBoard();
@@ -833,6 +861,7 @@ const PipeGame = {
     this.locked = true;
     clearInterval(this.ticking);
     this.cleared++;
+    this.results[this.boardIdx] = true;  // 이 판(=이 작업) 성공 기록
     this.updateHUD();
     SFX.clear();
     this.els.crt.classList.remove('flash');
@@ -844,62 +873,53 @@ const PipeGame = {
   boardFail() {
     this.locked = true;
     clearInterval(this.ticking);
+    this.results[this.boardIdx] = false; // 이 판(=이 작업) 실패 기록
     SFX.fail();
     this.advance(false);
   },
 
-  /* 성공/실패와 무관하게 다음 회선으로 진행, 마지막 회선이 끝나면 최종 등급 */
+  /* 각 판은 각 작업에 1:1 대응. 결과(✓/✗)를 해당 줄에 찍고 다음 회선으로.
+     마지막 회선이 끝나면 최종 등급. */
   advance(success) {
+    const taskNo = this.boardIdx + 1; // 1판=작업1, 2판=작업2, 3판=작업3
     const isLast = this.boardIdx >= CONFIG.boards.length - 1;
     if (isLast) {
-      // 마지막 회선: 막간 없이 바로 결과로 (도장 쾅)
+      // 마지막 회선: 막간 없이 바로 결과로 (보드+도장)
       setTimeout(() => this.finish(), success ? 600 : 400);
       return;
     }
     const remain = CONFIG.boards.length - this.boardIdx - 1;
-    const done = this.cleared; // 누적 성공 = 완료한 작업 수
-    let log, msg;
+    let msg;
     if (success) {
-      // ---- Y2K 패치 연출: 누적 성공 수만큼 작업 목록이 위에서부터 완료된다 ----
-      const PATCH = {
-        1: { log: '작업 <b>1/3</b> 완료<br>연도 표기 <span class="old">YY (99)</span> → <span class="new">YYYY (1999)</span>',
-             msg: '연도가 <span class="fix">네 자리</span>로 돌아왔다!' },
-        2: { log: '작업 <b>2/3</b> 완료<br>날짜 연산 모듈 <span class="old">ERR</span> → <span class="new">OK</span>',
-             msg: '시계가 안정을 찾았다...' },
-      }[done];
-      log = PATCH.log;
-      msg = PATCH.msg + '<br>남은 회선 <b>' + remain + '개</b>. 서둘러!';
+      const M = {
+        1: '연도가 <span class="fix">네 자리</span>로 돌아왔다!',
+        2: '시계가 안정을 찾았다...',
+      }[taskNo];
+      msg = M + '<br>남은 회선 <b>' + remain + '개</b>. 서둘러!';
     } else {
-      log = '회선 ' + (this.boardIdx + 1) + ' 복구 실패 — <span class="old">시간 초과</span>';
-      msg = '이 회선은 포기다...<br>남은 회선 <b>' + remain + '개</b>에 집중하자!';
+      msg = '이 작업은 넘어가자...<br>남은 회선 <b>' + remain + '개</b>에 집중하자!';
     }
-    // 막간 화면 표시 → 사용자가 [다음 회선] 버튼을 누를 때까지 대기
+    // 막간 화면: 화이트보드에 이번 판 결과(✓/✗) 찍기 → [다음 회선] 대기
     setTimeout(() => {
       if (success) { SFX.patch(); SysDate.set(Math.min(this.cleared, 2)); }
-      this.els.patchLog.innerHTML = log;
       this.els.nextMsg.innerHTML = msg;
-      // 막간 화이트보드 체크리스트 갱신
-      //  - 누적 성공(done)만큼 위에서부터 체크
-      //  - 이번에 새로 완료된 항목(success일 때 done번째)만 줄긋기 애니메이션 재생
-      this.updateNextChecklist(done, success);
+      this.renderChecklist('#nextList', taskNo); // 이번 판 줄만 애니메이션
       this.els.ovNext.classList.remove('hidden');
     }, 500);
   },
 
-  /* 막간 체크리스트를 누적 성공 수에 맞춰 갱신.
-     justDone: 이번 회선에서 새로 완료된 작업 번호(없으면 0) → 그 항목만 애니메이션 */
-  updateNextChecklist(done, success) {
-    const justDone = success ? done : 0;
-    document.querySelectorAll('#nextList .cl-item').forEach(el => {
+  /* 체크리스트 보드에 results를 반영.
+     animateTask: 이 번호의 작업만 줄긋기 애니메이션 재생(나머지는 instant).
+                  0이면 전부 instant(결과 화면용). */
+  renderChecklist(selector, animateTask) {
+    document.querySelectorAll(selector + ' .cl-item').forEach(el => {
       const task = +el.dataset.task;
-      el.classList.remove('done', 'instant');
-      // 애니메이션 강제 리셋 (재생 보장)
-      void el.offsetWidth;
-      if (task <= done) {
-        // 이번에 새로 완료된 항목이 아니면 애니메이션 없이 즉시 체크 상태로
-        if (task !== justDone) el.classList.add('instant');
-        el.classList.add('done');
-      }
+      el.classList.remove('done', 'failed', 'instant');
+      void el.offsetWidth; // 애니메이션 강제 리셋
+      const r = this.results[task - 1]; // 해당 작업(판) 결과
+      if (r === undefined) return;       // 아직 안 한 판 → 빈 칸
+      if (task !== animateTask) el.classList.add('instant');
+      el.classList.add(r ? 'done' : 'failed');
     });
   },
 
@@ -917,15 +937,18 @@ const PipeGame = {
     this.locked = true;
     const grade = CONFIG.gradeOf(this.cleared);
     const MSG = {
-      A:    { stamp:'A', cls:'A', text:'"됐다!!! 거봐, 내가 막는다고 했지!"<br><span class="narr">의기양양하게, 남강산은 코트를 챙겼다.</span>' },
-      B:    { stamp:'B', cls:'B', text:'"어... 됐다, 됐어."<br><span class="narr">어쨌든 막긴 했다. 남강산은 코트를 챙겼다.</span>' },
-      C:    { stamp:'C', cls:'C', text:'"...일단 부장님께 보고드리자."<br><span class="narr">찜찜한 마음을 안고, 남강산은 코트를 챙겼다.</span>' },
-      FAIL: { stamp:'실패', cls:'F', text:'"후... 일단 뭐라도 했네."<br><span class="narr">영 개운치 않지만, 남강산은 코트를 챙겼다.</span>' },
+      A:    { stamp:'A', cls:'A', text:'"됐다!!! 거봐, 내가 막는다고 했지!"<br><span class="narr">콧노래를 흥얼거리며 사무실을 나섰다.</span>' },
+      B:    { stamp:'B', cls:'B', text:'"어... 됐다, 됐어."<br><span class="narr">서둘러 가방을 챙겨 엘리베이터로 향했다.</span>' },
+      C:    { stamp:'C', cls:'C', text:'"...일단 부장님께 보고드리자."<br><span class="narr">부장님 눈치를 보며 슬그머니 코트를 챙겼다.</span>' },
+      FAIL: { stamp:'실패', cls:'F', text:'"후... 일단 뭐라도 했네."<br><span class="narr">한숨을 내쉬며 서둘러 사무실을 빠져나왔다.</span>' },
     }[grade];
 
     if (grade === 'A') SysDate.rollover();
     else if (grade === 'FAIL') { SysDate.halt(); SFX.fail(); }
     else SysDate.set(Math.min(this.cleared, 2)); // B/C: 복구한 만큼만 날짜가 돌아옴
+
+    // 결과 보드: 마지막 판(3번 작업)은 줄긋기 애니메이션, 앞 두 판은 즉시 표시
+    this.renderChecklist('#resultList', CONFIG.boards.length);
 
     this.els.stamp.textContent = MSG.stamp;
     this.els.stamp.className = 'stamp ' + MSG.cls;
