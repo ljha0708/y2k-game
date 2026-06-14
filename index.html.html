@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<title>Y2K 회선 복구 작전</title>
+<style>
+  /* ============================================================
+     Y2K Game - 미니게임 1: 파이프 연결 (서버/회선 복구) v2
+     변경점:
+       1) 난이도 곡선: 4x4/15초 → 5x5/20초 → 6x6/20초 (판별 제한시간)
+       2) 난이도 평준화: 경로 길이/꺾임 수/최소 탭 수를 판별로 강제
+       3) Y2K 버그 수리 연출: 판을 깰수록 시스템 날짜가 복구됨
+          19100-01-01(버그) → 1999-12-31(패치) → 2000-01-01(롤오버 성공)
+     ============================================================ */
+  :root {
+    --desktop: #008080;
+    --win-gray: #c0c0c0;
+    --bevel-light: #ffffff;
+    --bevel-dark: #404040;
+    --title-a: #000080;
+    --title-b: #1084d0;
+    --crt-bg: #0a0e1a;
+    --pipe-off: #8a93a5;
+    --pipe-on: #3dff7e;
+    --danger: #ff3d3d;
+    --amber: #ffb84d;
+    --ink: #111;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body {
+    background: var(--desktop);
+    font-family: "DungGeunMo", "Galmuri9", "Courier New", monospace, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; user-select:none; touch-action:manipulation;
+  }
+
+  /* ---------- Windows 98 창 ---------- */
+  .win98 {
+    width: min(96vw, 430px);
+    background: var(--win-gray);
+    border-top:2px solid var(--bevel-light);
+    border-left:2px solid var(--bevel-light);
+    border-right:2px solid var(--bevel-dark);
+    border-bottom:2px solid var(--bevel-dark);
+    box-shadow: 6px 6px 0 rgba(0,0,0,.35);
+    padding:3px;
+  }
+  .titlebar {
+    background: linear-gradient(90deg, var(--title-a), var(--title-b));
+    color:#fff; display:flex; align-items:center; gap:6px;
+    padding:4px 6px; font-size:13px; font-weight:bold;
+  }
+  .titlebar .icon { width:14px; height:14px; background:#ffd000; border:1px solid #000;
+    display:inline-block; clip-path: polygon(0 30%, 40% 30%, 40% 0, 100% 0, 100% 100%, 0 100%); }
+  .titlebar .spacer { flex:1; }
+  .tbtn {
+    width:18px; height:16px; background:var(--win-gray); color:#000;
+    border-top:1px solid var(--bevel-light); border-left:1px solid var(--bevel-light);
+    border-right:1px solid var(--bevel-dark); border-bottom:1px solid var(--bevel-dark);
+    font-size:10px; line-height:14px; text-align:center;
+  }
+
+  /* ---------- 상태 표시줄 ---------- */
+  .hud { display:flex; align-items:center; gap:8px; padding:6px 8px; font-size:12px; }
+  .hud .lcd {
+    background:#1a1f12; color:#aef060; padding:3px 8px;
+    border-top:2px solid var(--bevel-dark); border-left:2px solid var(--bevel-dark);
+    border-right:2px solid var(--bevel-light); border-bottom:2px solid var(--bevel-light);
+    font-weight:bold; letter-spacing:1px; min-width:74px; text-align:center;
+  }
+  .hud .lcd.warn { color:#ff6b5e; animation: blink .5s steps(1) infinite; }
+  @keyframes blink { 50% { color:#5a2020; } }
+  .timebar-wrap {
+    flex:1; height:14px; background:#fff;
+    border-top:2px solid var(--bevel-dark); border-left:2px solid var(--bevel-dark);
+    border-right:2px solid var(--bevel-light); border-bottom:2px solid var(--bevel-light);
+    overflow:hidden;
+  }
+  .timebar { height:100%; width:100%;
+    background: repeating-linear-gradient(90deg, #2050d0 0 8px, #4070f0 8px 16px);
+    transition: width .1s linear; }
+  .timebar.low { background: repeating-linear-gradient(90deg, #d02020 0 8px, #f05040 8px 16px); }
+
+  /* ---------- CRT 모니터 영역 ---------- */
+  .crt {
+    position:relative; margin:0 6px 6px;
+    background: var(--crt-bg);
+    border-top:2px solid var(--bevel-dark); border-left:2px solid var(--bevel-dark);
+    border-right:2px solid var(--bevel-light); border-bottom:2px solid var(--bevel-light);
+    padding:8px 26px 14px;
+  }
+  .crt::after { /* 스캔라인 */
+    content:""; position:absolute; inset:0; pointer-events:none; z-index:3;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 1px, transparent 1px 3px);
+    mix-blend-mode: screen;
+  }
+
+  /* ---------- Y2K 시스템 날짜 상태 띠 (화면 밖 상단, 트레이 시계 감성) ---------- */
+  .sysbar {
+    display:flex; align-items:center; gap:7px;
+    margin:4px 6px 0; padding:4px 8px;
+    background:#1a1f12;
+    border-top:2px solid var(--bevel-dark); border-left:2px solid var(--bevel-dark);
+    border-right:2px solid var(--bevel-light); border-bottom:2px solid var(--bevel-light);
+    font-size:12px; letter-spacing:1px; font-weight:bold;
+  }
+  .sysbar-led {
+    width:9px; height:9px; border-radius:50%; flex:0 0 auto;
+    background:var(--danger); box-shadow:0 0 6px var(--danger);
+  }
+  .sysbar-lbl { color:#5a6680; font-size:10px; }
+  .sysbar-clock { flex:1; text-align:center; }
+  .sysbar-status { font-size:10px; padding:1px 5px; border:1px solid currentColor; }
+
+  /* 단계별 상태: err(고장) → warnY(패치1) → ok(안정) */
+  .sysbar.err   { color:var(--danger); animation: dateGlitch .8s steps(2) infinite; }
+  .sysbar.err   .sysbar-led { background:var(--danger); box-shadow:0 0 6px var(--danger); }
+  .sysbar.warnY { color:var(--amber); }
+  .sysbar.warnY .sysbar-led { background:var(--amber); box-shadow:0 0 6px var(--amber); animation: ledFlicker 2.4s steps(1) infinite; }
+  .sysbar.ok    { color:var(--pipe-on); text-shadow:0 0 8px #3dff7e55; }
+  .sysbar.ok    .sysbar-led { background:var(--pipe-on); box-shadow:0 0 8px var(--pipe-on); }
+  @keyframes dateGlitch {
+    0%,100% { transform:translateX(0); opacity:1; }
+    20% { transform:translateX(-2px); }
+    40% { transform:translateX(2px); opacity:.55; }
+    60% { transform:translateX(-1px) skewX(6deg); }
+    80% { transform:translateX(1px); opacity:.85; }
+  }
+  @keyframes ledFlicker { 0%,100% { opacity:1; } 92% { opacity:1; } 95% { opacity:.3; } }
+
+  /* ---------- 글리치(고장) 단계: 패치할수록 약해짐 (창 전체 → CRT만 → 안정) ---------- */
+  /* 고장(g2): 창 전체가 흔들림 */
+  .win98.g2 { animation: winShake 3.2s steps(2) infinite; }
+  @keyframes winShake {
+    0%,92%,100% { transform:translate(0,0); }
+    94% { transform:translate(-2px,1px); }
+    96% { transform:translate(2px,-1px); }
+    98% { transform:translate(-1px,0); }
+  }
+  /* 패치1(g1): 창은 멈추고 CRT 그리드만 미세하게 떨림 */
+  .crt.g1 .grid { animation: crtShake 3.5s steps(2) infinite; }
+  @keyframes crtShake {
+    0%,93%,100% { transform:translate(0,0); }
+    94% { transform:translate(-1px,1px); }
+    96% { transform:translate(1px,-1px); }
+    98% { transform:translate(-1px,0); }
+  }
+  .tear { /* 화면 찢김 라인 */
+    position:absolute; left:0; right:0; height:3px; z-index:2; pointer-events:none;
+    background: rgba(255,80,80,.25); display:none;
+  }
+  /* 고장 단계에서만 찢김 라인, 패치되면 사라짐 */
+  .crt.g2 .tear { display:block; animation: tearMove 2.8s linear infinite; }
+  @keyframes tearMove { 0% { top:5%; } 100% { top:95%; } }
+
+  .grid {
+    display:grid; gap:0; margin:0 auto;
+    width:100%; max-width:330px;
+  }
+  .cell { aspect-ratio:1; cursor:pointer; }
+  .cell svg { width:100%; height:100%; display:block; }
+
+  .port {
+    position:absolute; font-size:10px; font-weight:bold; color:#fff;
+    background:var(--ink); padding:2px 4px; border:2px solid #fff;
+    z-index:2; white-space:nowrap;
+  }
+  .port.src { left:2px; }
+  .port.dst { right:2px; }
+  .port.on { background:#0a8f3c; }
+
+  /* ---------- 오버레이 ---------- */
+  .overlay {
+    position:absolute; inset:0; z-index:5;
+    background: rgba(4,8,18,.88);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:20px; gap:14px;
+  }
+  .overlay.hidden { display:none; }
+  .bubble {
+    background:#fff; color:var(--ink); border:3px solid var(--ink);
+    border-radius:14px; padding:12px 16px; max-width:300px;
+    font-size:14px; line-height:1.6; position:relative;
+    box-shadow: 4px 4px 0 rgba(0,0,0,.5);
+  }
+  .bubble::after {
+    content:""; position:absolute; bottom:-14px; left:40px;
+    border:8px solid transparent; border-top:12px solid var(--ink);
+  }
+  .bubble b { color:#c0202a; }
+  .bubble .fix { color:#0a8f3c; }
+  .patchlog { /* 패치 적용 로그 (구버전 → 신버전) */
+    font-size:12px; background:#0a0e1a; border:2px solid #2a3550;
+    padding:8px 14px; color:#8a93a5; line-height:1.8; letter-spacing:1px;
+  }
+  .patchlog .old { color:var(--danger); text-decoration: line-through; }
+  .patchlog .new { color:var(--pipe-on); font-weight:bold; }
+  .scene-tag { color:#ffd000; font-size:12px; letter-spacing:2px; }
+
+  /* ---------- 인트로 목표 화면 ---------- */
+  .goal-head { color:#fff; font-size:15px; font-weight:bold; line-height:1.5; }
+  .goal-head b { color:#ffd000; }
+  .checklist {
+    background:#f4f1e0; color:var(--ink); border:3px solid var(--ink);
+    padding:12px 14px; max-width:300px; text-align:left;
+    box-shadow: 4px 4px 0 rgba(0,0,0,.5);
+    background-image: repeating-linear-gradient(0deg, transparent 0 25px, rgba(0,0,0,.05) 25px 26px);
+  }
+  .cl-title {
+    font-size:12px; font-weight:bold; text-align:center;
+    padding-bottom:8px; margin-bottom:8px; border-bottom:2px dashed #888;
+  }
+  .cl-item { display:flex; gap:8px; align-items:flex-start; padding:5px 0; font-size:12.5px; line-height:1.45; }
+  .cl-box { font-weight:bold; font-size:15px; line-height:1.1; color:#c0202a; flex:0 0 auto; transition: color .2s; }
+  .cl-item.done .cl-box { color:#0a8f3c; }
+  .cl-item.done .cl-txt { color:#0a8f3c; text-decoration: line-through; text-decoration-color:#0a8f3c88; }
+  .cl-txt b { color:#000080; }
+  .cl-item.done .cl-txt b { color:#0a8f3c; }
+  .cl-sub { color:#777; font-size:11px; }
+  .goal-note { color:#cdd6ea; font-size:12px; line-height:1.6; max-width:290px; }
+  .goal-note b { color:var(--pipe-on); }
+  .btn98 {
+    font-family:inherit; font-size:14px; font-weight:bold; padding:8px 22px;
+    background:var(--win-gray); color:#000; cursor:pointer;
+    border-top:2px solid var(--bevel-light); border-left:2px solid var(--bevel-light);
+    border-right:2px solid var(--bevel-dark); border-bottom:2px solid var(--bevel-dark);
+  }
+  .btn98:active {
+    border-top:2px solid var(--bevel-dark); border-left:2px solid var(--bevel-dark);
+    border-right:2px solid var(--bevel-light); border-bottom:2px solid var(--bevel-light);
+  }
+
+  .stamp {
+    font-size:64px; font-weight:900; line-height:1;
+    border:6px solid; border-radius:10px; padding:8px 24px;
+    transform: rotate(-8deg) scale(0);
+    animation: stampIn .35s cubic-bezier(.2,2.2,.4,1) forwards;
+  }
+  @keyframes stampIn { to { transform: rotate(-8deg) scale(1); } }
+  .stamp.A { color:#3dff7e; border-color:#3dff7e; text-shadow:0 0 18px #3dff7e88; }
+  .stamp.B { color:#5ab4ff; border-color:#5ab4ff; }
+  .stamp.C { color:#ffc24d; border-color:#ffc24d; }
+  .stamp.F { color:var(--danger); border-color:var(--danger); }
+  .result-sub { color:#cdd6ea; font-size:13px; line-height:1.7; max-width:290px; }
+  .result-sub .narr { display:block; margin-top:8px; color:#8a93a5; font-size:12px; font-style:italic; }
+
+  .flash { animation: boardFlash .45s; }
+  @keyframes boardFlash { 0%,100%{filter:none;} 40%{filter:brightness(2.2) saturate(1.4);} }
+</style>
+</head>
+<body>
+
+<div class="win98">
+  <div class="titlebar">
+    <span class="icon"></span>
+    <span>회선복구.EXE — Y2K 비상대응 v2.0</span>
+    <span class="spacer"></span>
+    <span class="tbtn">_</span><span class="tbtn">×</span>
+  </div>
+
+  <!-- ★ Y2K 시스템 날짜: 화면 밖 상단 상태 띠 (작업표시줄 트레이 시계 감성) -->
+  <div class="sysbar" id="sysBar">
+    <span class="sysbar-led" id="sysLed"></span>
+    <span class="sysbar-lbl">SYS.DATE</span>
+    <span class="sysbar-clock" id="sysDateVal">19100-01-01 ??:??</span>
+    <span class="sysbar-status" id="sysStatus">ERROR</span>
+  </div>
+
+  <div class="hud">
+    <div class="lcd" id="lcdTime">15.0</div>
+    <div class="timebar-wrap"><div class="timebar" id="timebar"></div></div>
+    <div class="lcd" id="lcdBoard">회선 0/3</div>
+  </div>
+
+  <div class="crt" id="crt">
+    <div class="tear"></div>
+    <span class="port src" id="portSrc">IN</span>
+    <span class="port dst" id="portDst">서버</span>
+    <div class="grid" id="grid"></div>
+
+    <!-- 인트로: 목표 화면 -->
+    <div class="overlay" id="ovIntro">
+      <div class="scene-tag">1999.12.31 PM 11:40 — 서버실</div>
+      <div class="goal-head">자정까지 끊긴 회선 <b>3개</b>를 복구하라</div>
+
+      <!-- 고쳐야 할 3가지 (회사 화이트보드 체크리스트) -->
+      <div class="checklist" id="introList">
+        <div class="cl-title">📋 Y2K 긴급 패치 작업 목록</div>
+        <div class="cl-item"><span class="cl-box">□</span><span class="cl-txt">연도 표기 <b>2자리 → 4자리</b> 변환 <span class="cl-sub">(YY → YYYY)</span></span></div>
+        <div class="cl-item"><span class="cl-box">□</span><span class="cl-txt">날짜 연산 모듈 <b>오류 수정</b> <span class="cl-sub">(ERR → OK)</span></span></div>
+        <div class="cl-item"><span class="cl-box">□</span><span class="cl-txt">전 시스템 <b>패치 전송 및 적용</b> <span class="cl-sub">(전송 완료)</span></span></div>
+      </div>
+
+      <div class="goal-note">회선을 복구할 때마다 항목이 <b>위에서부터</b> 하나씩 수정된다.<br>
+        파이프를 <b>탭해서 돌려</b> IN→서버를 연결하라!</div>
+      <button class="btn98" id="btnStart">복구 시작 ▶</button>
+    </div>
+
+    <!-- 보드 클리어 막간 (패치 적용 로그) -->
+    <div class="overlay hidden" id="ovNext">
+      <div class="patchlog" id="patchLog"></div>
+      <div class="bubble" id="nextMsg"></div>
+      <button class="btn98" id="btnNext">다음 회선 ▶</button>
+    </div>
+
+    <!-- 결과 -->
+    <div class="overlay hidden" id="ovResult">
+      <div class="stamp" id="stampEl">A</div>
+      <div class="result-sub" id="resultMsg"></div>
+      <button class="btn98" id="btnRetry">다시 복구하기 ↺</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==============================================================
+   PipeGame v2
+   - 판별 스펙(크기/제한시간/난이도 범위)은 CONFIG.boards에서 조정
+   - 난이도 평준화: 경로 길이 / 꺾임 수 / 최소 탭 수를 범위로 강제
+   - PipeGame.onGameEnd(grade) : 'A'|'B'|'C'|'FAIL' → 스토리 엔진 연동
+   ============================================================== */
+
+const CONFIG = {
+  boards: [
+    // pathLen: 정답 경로 칸 수, bends: 꺾임 수, taps: 클리어 필요 최소 회전 수
+    { rows:4, cols:4, time:15, pathLen:[6,9],   bends:[4,6],  taps:[5,9]   },
+    { rows:5, cols:5, time:20, pathLen:[9,13],  bends:[5,8],  taps:[8,13]  },
+    { rows:6, cols:6, time:30, pathLen:[13,18], bends:[7,11], taps:[11,17] },
+  ],
+  gradeOf: cleared => cleared >= 3 ? 'A' : cleared === 2 ? 'B' : cleared === 1 ? 'C' : 'FAIL',
+};
+
+/* ---------- 방향 비트마스크: U=1, R=2, D=4, L=8 ---------- */
+const U=1, R=2, D=4, L=8;
+const OPP = { [U]:D, [R]:L, [D]:U, [L]:R };
+const DIRS = [
+  { bit:U, dr:-1, dc:0 }, { bit:R, dr:0, dc:1 },
+  { bit:D, dr:1, dc:0 },  { bit:L, dr:0, dc:-1 },
+];
+const rotCW = m => ((m << 1) | (m >> 3)) & 15;
+
+/* 현재 마스크 → 목표 마스크까지 필요한 최소 회전 수 (대칭 파이프 자동 처리) */
+function rotDist(cur, target) {
+  let m = cur;
+  for (let k = 0; k < 4; k++) { if (m === target) return k; m = rotCW(m); }
+  return 0;
+}
+
+/* 마스크를 무작위 회전하되, forbid 방향이 열린 회전은 제외
+   → 입구 셀은 L(IN쪽), 출구 셀은 R(서버쪽)이 처음부터 열려있지 않게 함 */
+function scrambleMask(m, forbid) {
+  const cands = [];
+  let cur = m;
+  for (let k = 0; k < 4; k++) {
+    if (!forbid || !(cur & forbid)) cands.push(cur);
+    cur = rotCW(cur);
+  }
+  return cands[(Math.random() * cands.length) | 0];
+}
+
+/* ---------- 사운드 ---------- */
+const SFX = (() => {
+  let ctx = null;
+  const ac = () => ctx || (ctx = new (window.AudioContext || window.webkitAudioContext)());
+  function beep(freq, dur=0.06, type='square', vol=0.05) {
+    try {
+      const a = ac();
+      if (a.state === 'suspended') a.resume(); // iOS: 정지 상태면 깨움
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
+      o.connect(g).connect(a.destination);
+      o.start(); o.stop(a.currentTime + dur);
+    } catch(e) {}
+  }
+  // iOS는 사용자 제스처 안에서만 오디오를 허용 → 첫 탭에서 컨텍스트 깨우기
+  const unlock = () => { try { const a = ac(); if (a.state === 'suspended') a.resume(); } catch(e) {} };
+  document.addEventListener('pointerdown', unlock, { once: true });
+  document.addEventListener('touchstart', unlock, { once: true });
+  return {
+    tap:   () => beep(420, .05),
+    clear: () => { beep(523,.09); setTimeout(()=>beep(659,.09),90); setTimeout(()=>beep(784,.14),180); },
+    fail:  () => { beep(220,.2,'sawtooth',.06); setTimeout(()=>beep(160,.3,'sawtooth',.06),180); },
+    patch: () => { beep(880,.05); setTimeout(()=>beep(1175,.08),70); },
+  };
+})();
+
+/* ---------- 경로 생성 + 난이도 검증 ----------
+   입구/출구 파이프는 반드시 ㄱ자(곡선)가 되도록:
+   - 첫 이동을 수직(U/D)으로 강제 → 입구 셀 = L + 수직 = ㄱ자
+   - 마지막 열 도달 후 수직으로 1칸 연장 → 출구 셀 = 수직 + R = ㄱ자
+------------------------------------------------- */
+function carvePath(rows, cols) {
+  const srcRow = (Math.random() * rows) | 0;
+  const visited = new Set();
+  const path = [];
+  let r = srcRow, c = 0;
+  visited.add(r + ',' + c);
+  path.push([r, c]);
+  let guard = rows * cols * 4;
+  let first = true;
+  while (c < cols - 1 && guard-- > 0) {
+    const opts = [];
+    for (const d of DIRS) {
+      if (first && d.bit !== U && d.bit !== D) continue; // 입구 ㄱ자: 첫 이동은 수직만
+      const nr = r + d.dr, nc = c + d.dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      if (visited.has(nr + ',' + nc)) continue;
+      const w = d.bit === R ? 3 : d.bit === L ? 1 : 2;
+      for (let i = 0; i < w; i++) opts.push(d);
+    }
+    if (!opts.length) return null;
+    const d = opts[(Math.random() * opts.length) | 0];
+    r += d.dr; c += d.dc;
+    visited.add(r + ',' + c);
+    path.push([r, c]);
+    first = false;
+  }
+  if (c !== cols - 1) return null;
+  // 출구 ㄱ자: 마지막 열에서 수직으로 1칸 더 이동한 곳을 출구로
+  const vRows = [];
+  if (r - 1 >= 0 && !visited.has((r - 1) + ',' + (cols - 1))) vRows.push(r - 1);
+  if (r + 1 < rows && !visited.has((r + 1) + ',' + (cols - 1))) vRows.push(r + 1);
+  if (!vRows.length) return null;
+  const nr = vRows[(Math.random() * vRows.length) | 0];
+  path.push([nr, cols - 1]);
+  return { path, srcRow, dstRow: nr };
+}
+
+/* 경로의 꺾임 수: 진행 방향이 바뀌는 횟수 (시작 L진입, 끝 R진출 포함) */
+function countBends(path) {
+  const dirs = [];
+  dirs.push(R); // 소스에서 첫 칸으로는 항상 오른쪽 진입
+  for (let i = 1; i < path.length; i++) {
+    const [pr, pc] = path[i-1], [r, c] = path[i];
+    dirs.push(r > pr ? D : r < pr ? U : c > pc ? R : L);
+  }
+  dirs.push(R); // 마지막 칸에서 서버로 진출
+  let bends = 0;
+  for (let i = 1; i < dirs.length; i++) if (dirs[i] !== dirs[i-1]) bends++;
+  return bends;
+}
+
+const inRange = (v, [lo, hi]) => v >= lo && v <= hi;
+
+function genBoard(spec) {
+  const { rows, cols } = spec;
+
+  for (let attempt = 0; attempt < 400; attempt++) {
+    // 1) 경로가 길이/꺾임 조건을 만족할 때까지 생성
+    const carved = carvePath(rows, cols);
+    if (!carved) continue;
+    const { path, srcRow, dstRow } = carved;
+    if (!inRange(path.length, spec.pathLen)) continue;
+    if (!inRange(countBends(path), spec.bends)) continue;
+
+    // 2) 정답 마스크 배치
+    const sol = new Array(rows * cols).fill(0);
+    for (let i = 0; i < path.length; i++) {
+      const [r, c] = path[i];
+      let m = 0;
+      if (i === 0) m |= L;
+      else {
+        const [pr, pc] = path[i-1];
+        m |= pr < r ? U : pr > r ? D : pc < c ? L : R;
+      }
+      if (i === path.length - 1) m |= R;
+      else {
+        const [nr, nc] = path[i+1];
+        m |= nr < r ? U : nr > r ? D : nc < c ? L : R;
+      }
+      sol[r * cols + c] = m;
+    }
+    const fillers = [U|D, U|R, U|R|D];
+    for (let i = 0; i < sol.length; i++) {
+      if (!sol[i]) {
+        let m = fillers[(Math.random() * fillers.length) | 0];
+        const rot = (Math.random() * 4) | 0;
+        for (let k = 0; k < rot; k++) m = rotCW(m);
+        sol[i] = m | 16;
+      }
+    }
+
+    // 3) 섞기: 필요 탭 수가 spec.taps 범위에 들어올 때까지 재시도
+    //    입구 셀은 IN과, 출구 셀은 서버와 미리 연결된 상태로 시작하지 않음
+    const sIdx = srcRow * cols, eIdx = dstRow * cols + (cols - 1);
+    for (let s = 0; s < 60; s++) {
+      const cells = sol.map((m, i) => {
+        const forbid = i === sIdx ? L : i === eIdx ? R : 0;
+        return { mask: scrambleMask(m & 15, forbid) };
+      });
+      let taps = 0;
+      for (const [r, c] of path) {
+        const i = r * cols + c;
+        taps += rotDist(cells[i].mask, sol[i] & 15);
+      }
+      if (!inRange(taps, spec.taps)) continue;
+      return { cells, srcRow, dstRow, rows, cols };
+    }
+  }
+
+  // 폴백: 조건 검증 없이 생성 (이론상 도달하지 않음)
+  const carved = carvePath(rows, cols) || { path:[[0,0]], srcRow:0, dstRow:0 };
+  return genBoardLoose(spec, carved);
+}
+
+function genBoardLoose(spec, carved) {
+  const { rows, cols } = spec;
+  const { path, srcRow, dstRow } = carved;
+  const sol = new Array(rows * cols).fill(0);
+  for (let i = 0; i < path.length; i++) {
+    const [r, c] = path[i];
+    let m = 0;
+    m |= i === 0 ? L : 0; m |= i === path.length - 1 ? R : 0;
+    if (i > 0) { const [pr,pc]=path[i-1]; m |= pr<r?U:pr>r?D:pc<c?L:R; }
+    if (i < path.length-1) { const [nr,nc]=path[i+1]; m |= nr<r?U:nr>r?D:nc<c?L:R; }
+    sol[r*cols+c] = m;
+  }
+  const cells = sol.map(m => {
+    let cur = (m & 15) || (U|R);
+    const rot = (Math.random()*4)|0;
+    for (let k=0;k<rot;k++) cur = rotCW(cur);
+    return { mask: cur };
+  });
+  return { cells, srcRow, dstRow, rows, cols };
+}
+
+/* ---------- 흐름 계산 (BFS) ---------- */
+function computeFlow(board) {
+  const { rows, cols } = board;
+  const lit = new Set();
+  const start = board.srcRow * cols;
+  if (!(board.cells[start].mask & L)) return { lit, solved: false };
+  const q = [start];
+  lit.add(start);
+  while (q.length) {
+    const i = q.shift();
+    const r = (i / cols) | 0, c = i % cols;
+    const m = board.cells[i].mask;
+    for (const d of DIRS) {
+      if (!(m & d.bit)) continue;
+      const nr = r + d.dr, nc = c + d.dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      const ni = nr * cols + nc;
+      if (lit.has(ni)) continue;
+      if (board.cells[ni].mask & OPP[d.bit]) { lit.add(ni); q.push(ni); }
+    }
+  }
+  const end = board.dstRow * cols + (cols - 1);
+  const solved = lit.has(end) && !!(board.cells[end].mask & R);
+  return { lit, solved };
+}
+const solvedCheck = b => computeFlow(b).solved;
+
+/* ---------- 셀 SVG 렌더 (웹툰풍 굵은 윤곽선) ---------- */
+function cellSVG(mask, on) {
+  const armsOf = m => {
+    const a = [];
+    if (m & U) a.push('M50 50 L50 -2');
+    if (m & R) a.push('M50 50 L102 50');
+    if (m & D) a.push('M50 50 L50 102');
+    if (m & L) a.push('M50 50 L-2 50');
+    return a.join(' ');
+  };
+  const d = armsOf(mask);
+  const inner = on ? 'var(--pipe-on)' : 'var(--pipe-off)';
+  const glow = on ? '<path d="'+d+'" stroke="var(--pipe-on)" stroke-width="40" stroke-linecap="round" opacity=".18"/>' : '';
+  return '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
+    + glow
+    + '<path d="'+d+'" stroke="#0d0d0d" stroke-width="34" stroke-linecap="butt"/>'
+    + '<path d="'+d+'" stroke="'+inner+'" stroke-width="22" stroke-linecap="butt"/>'
+    + '<circle cx="50" cy="50" r="15" fill="'+inner+'" stroke="#0d0d0d" stroke-width="5"/>'
+    + '</svg>';
+}
+
+/* ---------- Y2K 시스템 날짜 연출 (화면 밖 상태 띠 + 글리치 단계) ----------
+   stage 0: 19100-01-01 (두 자리 연도 99+1 → 19100 버그) — 창 전체 흔들림
+   stage 1: 1999-12-31 23:47 (YY→YYYY 패치) — CRT 그리드만 미세 떨림
+   stage 2: 1999-12-31 23:55 (연산 모듈 정상화) — 완전 안정
+   rollover: 카운트다운 → 2000-01-01 00:00:00 (A등급)
+   halt    : 1900-01-01 SYSTEM HALT (실패)
+   글리치 범위: 창 전체(g2) → CRT만(g1) → 안정 순으로 축소
+------------------------------------------------ */
+const SysDate = {
+  bar: null, val: null, status: null, win: null, crt: null, rolling: null,
+  init() {
+    this.bar    = document.getElementById('sysBar');
+    this.val    = document.getElementById('sysDateVal');
+    this.status = document.getElementById('sysStatus');
+    this.win    = document.querySelector('.win98');
+    this.crt    = document.getElementById('crt');
+  },
+  applyGlitch(level) { // 'win' | 'crt' | 'none'
+    this.win.classList.remove('g2');
+    this.crt.classList.remove('g1', 'g2');
+    if (level === 'win') this.win.classList.add('g2');       // 창 전체 흔들림 + 찢김
+    else if (level === 'crt') this.crt.classList.add('g1');  // CRT 그리드만 미세 떨림
+  },
+  set(stage) {
+    clearInterval(this.rolling);
+    const S = {
+      0: { txt:'19100-01-01 ??:??', cls:'err',   st:'ERROR',    g:'win'  },
+      1: { txt:'1999-12-31 23:47',  cls:'warnY', st:'PATCHING', g:'crt'  },
+      2: { txt:'1999-12-31 23:55',  cls:'ok',    st:'STABLE',   g:'none' },
+    }[stage];
+    this.val.textContent = S.txt;
+    this.status.textContent = S.st;
+    this.bar.className = 'sysbar ' + S.cls;
+    this.applyGlitch(S.g);
+  },
+  rollover() { // 23:59:57 → 2000-01-01 00:00:00 카운트 연출 (A등급)
+    clearInterval(this.rolling);
+    this.applyGlitch('none');
+    this.bar.className = 'sysbar ok';
+    this.status.textContent = 'STABLE';
+    let s = 57;
+    this.val.textContent = '1999-12-31 23:59:' + s;
+    this.rolling = setInterval(() => {
+      s++;
+      if (s >= 60) {
+        clearInterval(this.rolling);
+        this.val.textContent = '2000-01-01 00:00:00';
+        this.status.textContent = 'Y2K OK';
+        SFX.clear();
+      } else {
+        this.val.textContent = '1999-12-31 23:59:' + s;
+        SFX.tap();
+      }
+    }, 700);
+  },
+  halt() { // 실패: 시계가 1900년으로 되감김
+    clearInterval(this.rolling);
+    this.val.textContent = '1900-01-01 SYSTEM HALT';
+    this.status.textContent = 'HALT';
+    this.bar.className = 'sysbar err';
+    this.applyGlitch('win');
+  },
+};
+
+/* ---------- 게임 본체 ---------- */
+const PipeGame = {
+  board: null,
+  boardIdx: 0,
+  timeLeft: 0,
+  cleared: 0,
+  ticking: null,
+  locked: true,
+  onGameEnd: grade => console.log('[PipeGame] grade =', grade), // ★ 스토리 엔진 연동 지점
+
+  els: {
+    grid:   document.getElementById('grid'),
+    time:   document.getElementById('lcdTime'),
+    boardN: document.getElementById('lcdBoard'),
+    bar:    document.getElementById('timebar'),
+    src:    document.getElementById('portSrc'),
+    dst:    document.getElementById('portDst'),
+    crt:    document.getElementById('crt'),
+    ovIntro: document.getElementById('ovIntro'),
+    ovNext:  document.getElementById('ovNext'),
+    nextMsg: document.getElementById('nextMsg'),
+    patchLog: document.getElementById('patchLog'),
+    ovResult: document.getElementById('ovResult'),
+    stamp:    document.getElementById('stampEl'),
+    resultMsg: document.getElementById('resultMsg'),
+  },
+
+  spec() { return CONFIG.boards[this.boardIdx]; },
+
+  start() {
+    this.boardIdx = 0;
+    this.cleared = 0;
+    this.locked = false;
+    SysDate.set(0);
+    // 인트로 체크리스트 초기화 (다시 복구하기 눌렀을 때 대비)
+    document.querySelectorAll('#introList .cl-item').forEach(el => el.classList.remove('done'));
+    this.els.ovIntro.classList.add('hidden');
+    this.els.ovResult.classList.add('hidden');
+    this.beginBoard();
+  },
+
+  beginBoard() {
+    const spec = this.spec();
+    this.timeLeft = spec.time;
+    this.newBoard(spec);
+    this.updateHUD();
+    clearInterval(this.ticking);
+    this.ticking = setInterval(() => this.tick(), 100);
+  },
+
+  tick() {
+    this.timeLeft = Math.max(0, this.timeLeft - 0.1);
+    this.updateHUD();
+    if (this.timeLeft <= 0) this.boardFail(); // 시간 초과 = 이 회선만 실패, 게임은 계속
+  },
+
+  updateHUD() {
+    const t = this.timeLeft, max = this.spec().time;
+    this.els.time.textContent = t.toFixed(1);
+    this.els.time.classList.toggle('warn', t <= 5);
+    this.els.bar.style.width = (t / max * 100) + '%';
+    this.els.bar.classList.toggle('low', t <= 5);
+    this.els.boardN.textContent = '회선 ' + this.cleared + '/' + CONFIG.boards.length;
+  },
+
+  newBoard(spec) {
+    this.board = genBoard(spec);
+    const g = this.els.grid;
+    g.style.gridTemplateColumns = 'repeat(' + spec.cols + ', 1fr)';
+    g.innerHTML = '';
+    this.board.cells.forEach((cell, i) => {
+      const div = document.createElement('div');
+      div.className = 'cell';
+      // iOS 대응: pointerdown 우선, 미지원 시 touchstart, 둘 다 안되면 click
+      if (window.PointerEvent) {
+        div.addEventListener('pointerdown', (e) => { e.preventDefault(); this.tap(i); });
+      } else {
+        let touched = false;
+        div.addEventListener('touchstart', (e) => { e.preventDefault(); touched = true; this.tap(i); }, { passive: false });
+        div.addEventListener('click', () => { if (touched) { touched = false; return; } this.tap(i); });
+      }
+      g.appendChild(div);
+    });
+    this.positionPorts();
+    this.render();
+  },
+
+  positionPorts() {
+    requestAnimationFrame(() => {
+      const cellH = this.els.grid.offsetHeight / this.board.rows;
+      const top = this.els.grid.offsetTop;
+      this.els.src.style.top = (top + this.board.srcRow * cellH + cellH/2 - 9) + 'px';
+      this.els.dst.style.top = (top + this.board.dstRow * cellH + cellH/2 - 9) + 'px';
+    });
+  },
+
+  tap(i) {
+    if (this.locked) return;
+    SFX.tap();
+    this.board.cells[i].mask = rotCW(this.board.cells[i].mask);
+    const { solved } = this.render();
+    if (solved) this.boardClear();
+  },
+
+  render() {
+    const flow = computeFlow(this.board);
+    this.board.cells.forEach((cell, i) => {
+      this.els.grid.children[i].innerHTML = cellSVG(cell.mask, flow.lit.has(i));
+    });
+    this.els.src.classList.toggle('on', flow.lit.size > 0);
+    this.els.dst.classList.toggle('on', flow.solved);
+    return flow;
+  },
+
+  boardClear() {
+    this.locked = true;
+    clearInterval(this.ticking);
+    this.cleared++;
+    this.updateHUD();
+    SFX.clear();
+    this.els.crt.classList.remove('flash');
+    void this.els.crt.offsetWidth;
+    this.els.crt.classList.add('flash');
+    this.advance(true);
+  },
+
+  boardFail() {
+    this.locked = true;
+    clearInterval(this.ticking);
+    SFX.fail();
+    this.advance(false);
+  },
+
+  /* 성공/실패와 무관하게 다음 회선으로 진행, 마지막 회선이 끝나면 최종 등급 */
+  advance(success) {
+    const isLast = this.boardIdx >= CONFIG.boards.length - 1;
+    if (isLast) {
+      // 마지막 회선: 막간 없이 바로 결과로 (도장 쾅)
+      setTimeout(() => this.finish(), success ? 600 : 400);
+      return;
+    }
+    const remain = CONFIG.boards.length - this.boardIdx - 1;
+    const done = this.cleared; // 누적 성공 = 완료한 작업 수
+    let log, msg;
+    if (success) {
+      // ---- Y2K 패치 연출: 누적 성공 수만큼 작업 목록이 위에서부터 완료된다 ----
+      const PATCH = {
+        1: { log: '작업 <b>1/3</b> 완료<br>연도 표기 <span class="old">YY (99)</span> → <span class="new">YYYY (1999)</span>',
+             msg: '연도가 <span class="fix">네 자리</span>로 돌아왔다!' },
+        2: { log: '작업 <b>2/3</b> 완료<br>날짜 연산 모듈 <span class="old">ERR</span> → <span class="new">OK</span>',
+             msg: '시계가 안정을 찾았다...' },
+      }[done];
+      log = PATCH.log;
+      msg = PATCH.msg + '<br>남은 회선 <b>' + remain + '개</b>. 서둘러!';
+    } else {
+      log = '회선 ' + (this.boardIdx + 1) + ' 복구 실패 — <span class="old">시간 초과</span>';
+      msg = '이 회선은 포기다...<br>남은 회선 <b>' + remain + '개</b>에 집중하자!';
+    }
+    // 막간 화면 표시 → 사용자가 [다음 회선] 버튼을 누를 때까지 대기
+    setTimeout(() => {
+      if (success) { SFX.patch(); SysDate.set(Math.min(this.cleared, 2)); }
+      this.els.patchLog.innerHTML = log;
+      this.els.nextMsg.innerHTML = msg;
+      this.els.ovNext.classList.remove('hidden');
+    }, 500);
+  },
+
+  // [다음 회선 ▶] 버튼으로 호출: 막간을 닫고 다음 보드 시작
+  proceedNext() {
+    if (this.els.ovNext.classList.contains('hidden')) return;
+    this.els.ovNext.classList.add('hidden');
+    this.boardIdx++;
+    this.locked = false;
+    this.beginBoard();
+  },
+
+  finish() {
+    clearInterval(this.ticking);
+    this.locked = true;
+    const grade = CONFIG.gradeOf(this.cleared);
+    const MSG = {
+      A:    { stamp:'A', cls:'A', text:'"됐다!!! 거봐, 내가 막는다고 했지!"<br><span class="narr">의기양양하게, 남강산은 코트를 챙겼다.</span>' },
+      B:    { stamp:'B', cls:'B', text:'"어... 됐다, 됐어."<br><span class="narr">어쨌든 막긴 했다. 남강산은 코트를 챙겼다.</span>' },
+      C:    { stamp:'C', cls:'C', text:'"...일단 부장님께 보고드리자."<br><span class="narr">찜찜한 마음을 안고, 남강산은 코트를 챙겼다.</span>' },
+      FAIL: { stamp:'실패', cls:'F', text:'"후... 일단 뭐라도 했네."<br><span class="narr">영 개운치 않지만, 남강산은 코트를 챙겼다.</span>' },
+    }[grade];
+
+    if (grade === 'A') SysDate.rollover();
+    else if (grade === 'FAIL') { SysDate.halt(); SFX.fail(); }
+    else SysDate.set(Math.min(this.cleared, 2)); // B/C: 복구한 만큼만 날짜가 돌아옴
+
+    this.els.stamp.textContent = MSG.stamp;
+    this.els.stamp.className = 'stamp ' + MSG.cls;
+    this.els.resultMsg.innerHTML = MSG.text;
+    this.els.ovResult.classList.remove('hidden');
+    this.onGameEnd(grade); // ★ 스토리 엔진으로 등급 전달
+  },
+};
+
+SysDate.init();
+
+/* 버튼 바인딩: iOS 사파리에서 click이 씹히는 경우 대비해 pointerup도 함께 받음.
+   각 버튼을 개별 try로 감싸 하나가 실패해도 나머지 바인딩이 유지되게 함. */
+function bindTap(id, handler) {
+  const el = document.getElementById(id);
+  if (!el) { console.warn('[bind] 요소 없음:', id); return; }
+  let fired = false;
+  const run = (e) => {
+    if (e) e.preventDefault();
+    if (fired) return;          // click+pointerup 중복 방지
+    fired = true;
+    setTimeout(() => { fired = false; }, 350);
+    handler();
+  };
+  el.addEventListener('click', run);
+  el.addEventListener('pointerup', run);
+  el.addEventListener('touchend', run, { passive: false });
+}
+
+bindTap('btnStart', () => PipeGame.start());
+bindTap('btnNext',  () => PipeGame.proceedNext());
+bindTap('btnRetry', () => PipeGame.start());
+window.addEventListener('resize', () => PipeGame.board && PipeGame.positionPorts());
+</script>
+</body>
+</html>
