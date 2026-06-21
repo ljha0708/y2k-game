@@ -7,15 +7,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="format-detection" content="telephone=no">
-<title>Y2K 비상식량 정리 대작전</title>
+<title>Y2K 비상용품 정리 대작전</title>
 <style>
   /* ============================================================
-     Y2K Game — 미니게임 2: 카드 뒤집기 (비상식량 정리)
+     Y2K Game — 미니게임 2: 카드 뒤집기 (비상용품 정리)
      배경: 1999.12.31 밤, 집 거실 / 인물: 여지혜·남강산·나인주
      스타일: 밝은 형광등 거실, 따뜻한 가정집 톤 (미니게임 1과 대비)
 
      [게임 규칙]
-       - 카드를 2장씩 뒤집어 같은 비상식량끼리 짝 맞추기 (단판, 10페어)
+       - 카드를 2장씩 뒤집어 같은 비상용품끼리 짝 맞추기 (단판, 10페어)
        - 제한시간 안에 20장 전부 매칭하면 클리어
        - 등급 = 클리어 시 잔여 시간 (A:45s+ / B:20-44s / C:1-19s / 실패:시간초과)
 
@@ -104,14 +104,15 @@
   }
   .timer-fill.low { background: linear-gradient(90deg, #ff7a6e, #d23f3f); }
 
-  /* ---------- 카드 그리드 (4열 × 5행 = 20장) ---------- */
+  /* ---------- 카드 그리드 (4열 × 5행 = 20장, 절대위치로 이동 애니메이션) ---------- */
   .grid {
-    display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;
+    position:relative; width:100%;
   }
   .card {
-    position:relative; aspect-ratio: 3/4; cursor:pointer;
-    perspective: 700px;
+    position:absolute; cursor:pointer; perspective: 700px;
+    transition: left .5s cubic-bezier(.4,.1,.2,1), top .5s cubic-bezier(.4,.1,.2,1);
   }
+  .grid.shuffling .card { z-index:5; }
   .card-inner {
     position:absolute; inset:0; transition: transform .4s cubic-bezier(.4,.2,.2,1);
     transform-style: preserve-3d;
@@ -134,7 +135,7 @@
     content:"♥"; font-size:18px; color:rgba(255,255,255,.85);
     text-shadow:0 1px 2px rgba(180,80,110,.4);
   }
-  /* 앞면: 비상식량 */
+  /* 앞면: 비상용품 */
   .card-face {
     background: var(--card-face); border:3px solid var(--accent);
     transform: rotateY(180deg); gap:3px; padding:3px;
@@ -142,11 +143,11 @@
   .card-face .emoji { font-size: clamp(24px, 8vw, 38px); line-height:1; }
   .card-face .label { font-size: clamp(9px, 2.6vw, 12px); font-weight:bold; color:var(--ink); }
   .card.matched .card-face { border-color:var(--leaf); background:#f0fbef; }
-  .card.matched { animation: matchPop .4s ease; }
-  @keyframes matchPop { 0%{transform:scale(1);} 40%{transform:scale(1.08);} 100%{transform:scale(1);} }
   .card.matched .card-inner { box-shadow:0 0 0 3px rgba(95,168,95,.4); border-radius:10px; }
-  .card.shake { animation: cardShake .35s; }
-  @keyframes cardShake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);} 75%{transform:translateX(4px);} }
+  .card.pop { animation: matchPop .4s ease; }
+  @keyframes matchPop { 0%{transform:scale(1);} 40%{transform:scale(1.08);} 100%{transform:scale(1);} }
+  .card.shake .card-inner { animation: cardShake .35s; }
+  @keyframes cardShake { 0%,100%{transform:rotateY(180deg) translateX(0);} 25%{transform:rotateY(180deg) translateX(-4px);} 75%{transform:rotateY(180deg) translateX(4px);} }
 
   /* ---------- 오버레이 공통 ---------- */
   .overlay {
@@ -247,24 +248,36 @@
 <div class="room">
   <div class="room-inner">
     <div class="topbar">
-      <div class="room-title"><span class="dot"></span>비상식량 정리</div>
+      <div class="room-title"><span class="dot"></span><span id="roundLabel">비상용품 정리</span></div>
       <div class="pair-count" id="pairCount">0 / 10</div>
     </div>
 
     <div class="timer-row">
-      <div class="timer-num" id="timerNum">60.0</div>
+      <div class="timer-num" id="timerNum">40.0</div>
       <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
     </div>
 
     <div class="grid" id="grid"></div>
 
+    <!-- 1판 → 2판 막간 -->
+    <div class="overlay hidden" id="ovNext">
+      <div class="memo">
+        <div class="memo-title">1단계 정리 완료!</div>
+        <div class="memo-note" style="margin-top:8px">
+          이번엔 <b>15초마다</b> 비상용품이<br>여기저기 굴러다닌다...!<br>
+          위치가 바뀌기 전에 <b>빨리</b> 짝을 맞춰!
+        </div>
+      </div>
+      <button class="btn" id="btnNext">2단계 시작 ▶</button>
+    </div>
+
     <!-- 목표 화면 -->
     <div class="overlay" id="ovIntro">
       <div class="scene-tag">1999.12.31 밤 — 우리 집 거실</div>
       <div class="memo">
-        <div class="memo-title">엄마의 비상식량 목록</div>
+        <div class="memo-title">엄마의 비상용품 목록</div>
         <div class="memo-list" id="memoList"></div>
-        <div class="memo-note">쏟아진 비상식량, 같은 것끼리 짝지어 정리하자!<br>카드를 뒤집어 <b>같은 물건</b>을 찾으면 돼.</div>
+        <div class="memo-note">쏟아진 비상용품, 같은 것끼리 짝지어 정리하자!<br>카드를 뒤집어 <b>같은 물건</b>을 찾으면 돼.</div>
       </div>
       <button class="btn" id="btnStart">정리 시작 ▶</button>
     </div>
@@ -289,8 +302,13 @@
    ============================================================== */
 
 const CONFIG = {
-  timeLimit: 60.0,            // 초
   cols: 4,                    // 그리드 열 수 (20장 = 4×5)
+  rows: 5,
+  // 판별 설정: 1판=일반, 2판=섞기 모드
+  rounds: [
+    { time: 40.0, shuffle: false },                 // 1판: 워밍업
+    { time: 60.0, shuffle: true, shuffleEvery: 15 } // 2판: 15초마다 위치 섞기
+  ],
   items: [
     { key:'ramen',      emoji:'🍜', label:'라면' },
     { key:'water',      emoji:'💧', label:'생수' },
@@ -303,10 +321,11 @@ const CONFIG = {
     { key:'medicine',   emoji:'💊', label:'응급약' },
     { key:'map',        emoji:'🗺️', label:'지도' },
   ],
-  // 등급: 클리어 시 잔여 시간(초) 기준. 미클리어(시간초과)는 무조건 FAIL.
-  // 클리어했다면 25+ → A, 13+ → B, 그 외(0~12초) → C
-  gradeOf: (remain, cleared) =>
-    !cleared ? 'FAIL' : remain >= 25 ? 'A' : remain >= 13 ? 'B' : 'C',
+  // 등급 (2판 구조):
+  //   실패 = 1판 실패  /  C = 1판만 클리어  /  B = 2판까지 클리어
+  //   A   = 2판까지 클리어 + 2판 잔여 20초 이상
+  gradeOf: (r1cleared, r2cleared, r2remain) =>
+    !r1cleared ? 'FAIL' : !r2cleared ? 'C' : r2remain >= 20 ? 'A' : 'B',
 };
 
 /* ---------- 유틸 ---------- */
@@ -344,6 +363,7 @@ const SFX = (() => {
     match: () => { tone(659,.1,'sine',.06); setTimeout(()=>tone(880,.14,'sine',.06),90); },
     miss:  () => tone(247, .16, 'sine', .05),
     tick10:(f) => { tone(f,.1,'sine',.05); setTimeout(()=>tone(f*1.5,.12,'sine',.045),90); },
+    shuffle:() => { tone(330,.08,'triangle',.04); setTimeout(()=>tone(440,.08,'triangle',.04),60); setTimeout(()=>tone(392,.1,'triangle',.04),120); },
     type:  () => tone(1200, .025, 'sine', .018),
     clear: () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.18,'sine',.06), i*110)); },
     fail:  () => { tone(330,.2,'sine',.05); setTimeout(()=>tone(247,.3,'sine',.05),180); },
@@ -352,23 +372,29 @@ const SFX = (() => {
 
 /* ---------- 게임 본체 ---------- */
 const CardGame = {
-  cards: [],          // {id, item, el, state}
+  cards: [],          // {id, item, el, state, pos} pos=현재 격자 위치(0~19)
   first: null,        // 첫 번째로 뒤집은 카드
   matched: 0,         // 맞춘 페어 수
+  roundIdx: 0,        // 현재 판 (0=1판, 1=2판)
+  r1cleared: false,   // 1판 클리어 여부
   timeLeft: 0,
   ticking: null,
+  shuffleTimer: 0,    // 2판 섞기 누적 카운터
   locked: false,
-  finished: false,
+  finished: false,    // 전체 게임 종료
+  roundEnded: false,  // 현재 판 종료 (중복 방지)
   _typeTimer: null,
   onGameEnd: grade => console.log('[CardGame] grade =', grade), // ★ 스토리 엔진 연동 지점
 
   els: {
     grid:       document.getElementById('grid'),
     pairCount:  document.getElementById('pairCount'),
+    roundLabel: document.getElementById('roundLabel'),
     timerNum:   document.getElementById('timerNum'),
     timerFill:  document.getElementById('timerFill'),
     memoList:   document.getElementById('memoList'),
     ovIntro:    document.getElementById('ovIntro'),
+    ovNext:     document.getElementById('ovNext'),
     ovResult:   document.getElementById('ovResult'),
     stamp:      document.getElementById('stamp'),
     resultText: document.getElementById('resultText'),
@@ -379,29 +405,43 @@ const CardGame = {
   },
 
   init() {
-    // 목표 화면 메모 목록 채우기
     this.els.memoList.innerHTML = CONFIG.items
       .map(it => `<div><span class="memo-emoji">${it.emoji}</span>${it.label}</div>`)
       .join('');
+    window.addEventListener('resize', () => this.layoutCards());
   },
 
+  // 게임 전체 시작 (1판부터)
   start() {
     clearInterval(this.ticking);
     clearTimeout(this._typeTimer);
-    this.timeLeft = CONFIG.timeLimit;
+    this.roundIdx = 0;
+    this.r1cleared = false;
+    this.finished = false;
+    this.els.ovIntro.classList.add('hidden');
+    this.els.ovNext.classList.add('hidden');
+    this.els.ovResult.classList.add('hidden');
+    this.startRound();
+  },
+
+  // 현재 판 시작
+  startRound() {
+    clearInterval(this.ticking);
+    const round = CONFIG.rounds[this.roundIdx];
+    this.timeLeft = round.time;
     this.matched = 0;
     this.first = null;
     this.locked = false;
-    this.finished = false;
-    this.els.ovIntro.classList.add('hidden');
-    this.els.ovResult.classList.add('hidden');
+    this.roundEnded = false;
+    this.shuffleTimer = 0;
+    this._lastShuffleCount = 0;
+    this.els.roundLabel.textContent = '비상용품 정리 (' + (this.roundIdx + 1) + '/2)';
     this.buildBoard();
     this.updateHUD();
     this.ticking = setInterval(() => this.tick(), 100);
   },
 
   buildBoard() {
-    // 각 아이템 2장씩 → 셔플
     const deck = [];
     CONFIG.items.forEach((item, idx) => {
       deck.push({ id: idx, item }); deck.push({ id: idx, item });
@@ -409,7 +449,6 @@ const CardGame = {
     this.cards = shuffle(deck);
 
     const g = this.els.grid;
-    g.style.gridTemplateColumns = `repeat(${CONFIG.cols}, 1fr)`;
     g.innerHTML = '';
     this.cards.forEach((card, i) => {
       const el = document.createElement('div');
@@ -420,35 +459,91 @@ const CardGame = {
           '<div class="card-face"><span class="emoji">' + card.item.emoji + '</span>' +
             '<span class="label">' + card.item.label + '</span></div>' +
         '</div>';
-      el.addEventListener('pointerdown', (e) => { e.preventDefault(); this.flip(i); });
-      card.el = el; card.state = 'down';
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); this.flip(card); });
+      card.el = el; card.state = 'down'; card.pos = i;
       g.appendChild(el);
+    });
+    // 레이아웃 적용 (격자 위치 → 픽셀 좌표)
+    requestAnimationFrame(() => this.layoutCards());
+  },
+
+  // pos(0~19) → 픽셀 좌표로 카드 배치. 그리드 높이도 맞춤
+  layoutCards() {
+    if (!this.cards.length) return;
+    const g = this.els.grid;
+    const gap = 8;
+    const cols = CONFIG.cols, rows = CONFIG.rows;
+    const totalW = g.clientWidth || g.offsetWidth || g.parentElement.clientWidth;
+    if (!totalW) { // 아직 레이아웃 전이면 다음 프레임에 재시도
+      requestAnimationFrame(() => this.layoutCards());
+      return;
+    }
+    const cardW = (totalW - gap * (cols - 1)) / cols;
+    const cardH = cardW * 4 / 3; // aspect 3:4
+    g.style.height = (cardH * rows + gap * (rows - 1)) + 'px';
+    this.cards.forEach(card => {
+      const r = (card.pos / cols) | 0, c = card.pos % cols;
+      card.el.style.width = cardW + 'px';
+      card.el.style.height = cardH + 'px';
+      card.el.style.left = c * (cardW + gap) + 'px';
+      card.el.style.top  = r * (cardH + gap) + 'px';
     });
   },
 
   tick() {
+    const round = CONFIG.rounds[this.roundIdx];
     const prev = this.timeLeft;
     this.timeLeft = Math.max(0, this.timeLeft - 0.1);
-    // 10초 경계를 넘을 때마다 살짝 액션 (50, 40, 30, 20, 10초)
+
+    // 10초 경계: 타이머 펄스 연출 (긴장감)
     const prevMark = Math.ceil(prev / 10);
     const nowMark = Math.ceil(this.timeLeft / 10);
     if (nowMark < prevMark && this.timeLeft > 0) this.tenSecondPulse(nowMark * 10);
+
+    // 2판: shuffleEvery(초)마다 카드 위치 섞기 (경과시간 기준, 펄스와 독립)
+    if (round.shuffle && this.timeLeft > 0) {
+      const elapsed = round.time - this.timeLeft;
+      const shuffleCount = Math.floor(elapsed / round.shuffleEvery);
+      if (shuffleCount > this._lastShuffleCount) {
+        this._lastShuffleCount = shuffleCount;
+        this.shuffleBoard();
+      }
+    }
+
     this.updateHUD();
-    if (this.timeLeft <= 0) this.finish(false);
+    if (this.timeLeft <= 0) this.endRound(false);
   },
 
-  /* 10초 단위 경과 시 타이머 바 펄스 + 카운트다운 톤 (긴장감) */
+  /* 2판 위치 섞기: 매칭 안 된 카드들끼리만 위치 교환 (열린 카드는 열린 채로 이동) */
+  shuffleBoard() {
+    const movable = this.cards.filter(c => c.state !== 'matched');
+    if (movable.length < 2) return;
+    const positions = shuffle(movable.map(c => c.pos));
+    movable.forEach((card, k) => { card.pos = positions[k]; });
+    this.els.grid.classList.add('shuffling');
+    this.layoutCards(); // CSS transition(.5s)으로 부드럽게 이동
+    SFX.shuffle();
+    // 섞기 애니메이션 동안 입력 잠금
+    this.locked = true;
+    clearTimeout(this._shuffleLock);
+    this._shuffleLock = setTimeout(() => {
+      this.els.grid.classList.remove('shuffling');
+      // 진행 중 카드 비교(2장째 대기) 상태가 아니면 잠금 해제
+      if (!this._judging) this.locked = false;
+    }, 520);
+  },
+
   tenSecondPulse(remainMark) {
     const row = this.els.timerNum.parentElement;
     row.classList.remove('tenpulse');
     void row.offsetWidth;
     row.classList.add('tenpulse');
-    // 남은 시간이 적을수록 높은 음 (긴박)
     SFX.tick10(remainMark <= 10 ? 660 : remainMark <= 20 ? 550 : 440);
   },
 
   updateHUD() {
-    const t = this.timeLeft, max = CONFIG.timeLimit;
+    const max = CONFIG.rounds[this.roundIdx].time;
+    const t = this.timeLeft;
     this.els.timerNum.textContent = t.toFixed(1);
     this.els.timerNum.classList.toggle('warn', t <= 10);
     this.els.timerFill.style.width = (t / max * 100) + '%';
@@ -456,10 +551,9 @@ const CardGame = {
     this.els.pairCount.textContent = this.matched + ' / ' + CONFIG.items.length;
   },
 
-  flip(i) {
+  flip(card) {
     if (this.locked) return;
-    const card = this.cards[i];
-    if (card.state !== 'down') return; // 이미 열렸거나 매칭됨
+    if (card.state !== 'down') return;
 
     SFX.flip();
     card.state = 'up';
@@ -468,27 +562,28 @@ const CardGame = {
     if (!this.first) { this.first = card; return; }
     if (this.first === card) return;
 
-    // 두 번째 카드 뒤집음 → 판정
+    // 두 번째 카드 → 판정 (판정 중엔 섞기와 충돌 방지 위해 _judging 플래그)
     this.locked = true;
+    this._judging = true;
     const a = this.first, b = card;
     this.first = null;
 
     if (a.id === b.id) {
-      // 매칭 성공
       setTimeout(() => {
         a.state = b.state = 'matched';
-        a.el.classList.add('matched');
-        b.el.classList.add('matched');
+        a.el.classList.add('matched', 'pop');
+        b.el.classList.add('matched', 'pop');
         a.el.classList.remove('flipped');
         b.el.classList.remove('flipped');
+        setTimeout(() => { a.el.classList.remove('pop'); b.el.classList.remove('pop'); }, 400);
         SFX.match();
         this.matched++;
         this.updateHUD();
+        this._judging = false;
         this.locked = false;
-        if (this.matched >= CONFIG.items.length) this.finish(true);
+        if (this.matched >= CONFIG.items.length) this.endRound(true);
       }, 320);
     } else {
-      // 매칭 실패 → 잠깐 보여주고 다시 덮음
       setTimeout(() => {
         a.el.classList.add('shake');
         b.el.classList.add('shake');
@@ -498,17 +593,51 @@ const CardGame = {
         a.state = b.state = 'down';
         a.el.classList.remove('flipped', 'shake');
         b.el.classList.remove('flipped', 'shake');
+        this._judging = false;
         this.locked = false;
       }, 760);
     }
   },
 
-  finish(cleared) {
-    if (this.finished) return; // 중복 호출 방지 (시간만료 ↔ 마지막매칭 경합)
+  // 현재 판 종료 (cleared: 클리어 여부)
+  endRound(cleared) {
+    if (this.roundEnded) return;
+    this.roundEnded = true;
+    clearInterval(this.ticking);
+    clearTimeout(this._shuffleLock);
+    this.locked = true;
+    this.els.grid.classList.remove('shuffling');
+
+    if (this.roundIdx === 0) {
+      // 1판 종료
+      this.r1cleared = cleared;
+      if (!cleared) { this.finishGame(); return; } // 1판 실패 → 바로 결과(실패)
+      // 1판 클리어 → 막간 화면 (2단계 안내)
+      SFX.clear();
+      this.els.ovNext.classList.remove('hidden');
+    } else {
+      // 2판 종료 → 최종 결과
+      this.r2cleared = cleared;
+      this.r2remain = this.timeLeft;
+      this.finishGame();
+    }
+  },
+
+  // [2단계 시작] 버튼
+  proceedNext() {
+    if (this.els.ovNext.classList.contains('hidden')) return;
+    this.els.ovNext.classList.add('hidden');
+    this.roundIdx = 1;
+    this.startRound();
+  },
+
+  finishGame() {
+    if (this.finished) return;
     this.finished = true;
     clearInterval(this.ticking);
     this.locked = true;
-    const grade = CONFIG.gradeOf(this.timeLeft, cleared);
+
+    const grade = CONFIG.gradeOf(this.r1cleared, this.r2cleared, this.r2remain || 0);
     const MSG = {
       A:    { cls:'A', stamp:'A',    text:'잘 정리 해놨네, 딸이랑 아빠랑 합이 좋은데?' },
       B:    { cls:'B', stamp:'B',    text:'일단은... 뭐, 조금 뒤지면 찾겠지' },
@@ -516,11 +645,10 @@ const CardGame = {
       FAIL: { cls:'F', stamp:'실패', text:'어휴 정신없어. 인주랑 나가있어!' },
     }[grade];
 
-    if (cleared && grade === 'A') { SFX.clear(); this.burstConfetti(); }
-    else if (cleared) SFX.clear();
+    if (grade === 'A') { SFX.clear(); this.burstConfetti(); }
+    else if (grade === 'B' || grade === 'C') SFX.clear();
     else SFX.fail();
 
-    // 1) 결과 화면 + 도장 등장 (말풍선·버튼은 숨김 상태)
     this.els.stamp.textContent = MSG.stamp;
     this.els.stamp.className = 'stamp ' + MSG.cls;
     this.els.resultText.textContent = '';
@@ -531,7 +659,6 @@ const CardGame = {
     this.els.btnRetry.classList.add('btn-hidden');
     this.els.ovResult.classList.remove('hidden');
 
-    // 2) 도장 찍힌 뒤 → 말풍선 등장 → 타이핑 시작
     clearTimeout(this._typeTimer);
     setTimeout(() => {
       this.els.bubble.classList.remove('bubble-hidden');
@@ -606,6 +733,7 @@ function bindTap(id, handler) {
 
 CardGame.init();
 bindTap('btnStart', () => CardGame.start());
+bindTap('btnNext', () => CardGame.proceedNext());
 bindTap('btnRetry', () => CardGame.start());
 </script>
 </body>
