@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<title>Y2K 비상식량 정리 대작전</title>
+<style>
+  /* ============================================================
+     Y2K Game — 미니게임 2: 카드 뒤집기 (비상식량 정리)
+     배경: 1999.12.31 밤, 집 거실 / 인물: 여지혜·남강산·나인주
+     스타일: 밝은 형광등 거실, 따뜻한 가정집 톤 (미니게임 1과 대비)
+
+     [게임 규칙]
+       - 카드를 2장씩 뒤집어 같은 비상식량끼리 짝 맞추기 (단판, 10페어)
+       - 제한시간 안에 20장 전부 매칭하면 클리어
+       - 등급 = 클리어 시 잔여 시간 (A:45s+ / B:20-44s / C:1-19s / 실패:시간초과)
+
+     [스토리 엔진 연동] CardGame.onGameEnd(grade)  // 'A'|'B'|'C'|'FAIL'
+     ============================================================ */
+  :root {
+    --wall:        #fdf3e2;   /* 거실 벽지 (밝은 베이지) */
+    --wall-2:      #fbe9cf;
+    --frame:       #c89a5e;   /* 우드 프레임 */
+    --frame-dark:  #9e7338;
+    --frame-light: #e6c189;
+    --card-back-a: #ff9eb5;   /* 카드 뒷면 (밝은 핑크) */
+    --card-back-b: #ffd0a6;
+    --card-face:   #fffdf7;   /* 카드 앞면 */
+    --accent:      #e8743b;   /* 포인트 오렌지 */
+    --leaf:        #5fa85f;   /* 매칭 성공 그린 */
+    --ink:         #4a3520;   /* 따뜻한 갈색 글자 */
+    --memo:        #fff6a8;   /* 메모지 노랑 */
+    --shadow:      rgba(120,80,30,.28);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 0%, var(--wall) 0%, var(--wall-2) 100%);
+    font-family: "DungGeunMo","Galmuri9","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; user-select:none; touch-action:manipulation;
+    padding:10px;
+  }
+
+  /* ---------- 거실 프레임 (우드 액자) ---------- */
+  .room {
+    width: min(96vw, 440px);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.5), transparent 30%),
+      linear-gradient(135deg, var(--frame-light), var(--frame) 45%, var(--frame-dark));
+    border-radius:16px;
+    padding:10px;
+    box-shadow: 0 14px 34px var(--shadow), inset 0 2px 4px rgba(255,255,255,.5);
+  }
+  .room-inner {
+    background: linear-gradient(180deg, #fffdf9, #fdf3e0);
+    border-radius:10px;
+    padding:12px 12px 14px;
+    box-shadow: inset 0 0 0 2px rgba(200,154,94,.35), inset 0 4px 12px rgba(160,110,50,.12);
+  }
+
+  /* 상단 바: 제목 + 잔여 카운터 */
+  .topbar { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .room-title {
+    flex:1; font-size:14px; font-weight:bold; color:var(--ink);
+    display:flex; align-items:center; gap:6px;
+  }
+  .room-title .dot { width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 3px rgba(232,116,59,.22); }
+  .pair-count {
+    font-size:12px; font-weight:bold; color:#fff; background:var(--accent);
+    padding:3px 10px; border-radius:20px; box-shadow:0 2px 4px var(--shadow);
+  }
+
+  /* 타이머 바 */
+  .timer-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .timer-num {
+    font-size:13px; font-weight:bold; color:var(--ink); min-width:52px; text-align:center;
+    background:#fff; border-radius:8px; padding:3px 6px;
+    box-shadow: inset 0 1px 3px rgba(160,110,50,.25);
+  }
+  .timer-num.warn { color:#d23f3f; animation: numPulse .5s steps(1) infinite; }
+  @keyframes numPulse { 50% { color:#f3b0b0; } }
+  /* 10초 경과 펄스: 타이머 행 전체가 살짝 튕김 */
+  .timer-row.tenpulse { animation: tenPulse .5s ease; }
+  @keyframes tenPulse {
+    0%,100% { transform: scale(1); }
+    30% { transform: scale(1.04); }
+    50% { transform: scale(.99); }
+  }
+  .timer-row.tenpulse .timer-fill { animation: fillFlash .5s ease; }
+  @keyframes fillFlash { 30% { filter: brightness(1.5) saturate(1.3); } }
+  .timer-track {
+    flex:1; height:13px; background:rgba(200,154,94,.25); border-radius:7px; overflow:hidden;
+    box-shadow: inset 0 1px 2px rgba(160,110,50,.3);
+  }
+  .timer-fill {
+    height:100%; width:100%; border-radius:7px;
+    background: linear-gradient(90deg, #ffc24b, var(--accent));
+    transition: width .1s linear;
+  }
+  .timer-fill.low { background: linear-gradient(90deg, #ff7a6e, #d23f3f); }
+
+  /* ---------- 카드 그리드 (4열 × 5행 = 20장) ---------- */
+  .grid {
+    display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;
+  }
+  .card {
+    position:relative; aspect-ratio: 3/4; cursor:pointer;
+    perspective: 700px;
+  }
+  .card-inner {
+    position:absolute; inset:0; transition: transform .4s cubic-bezier(.4,.2,.2,1);
+    transform-style: preserve-3d;
+  }
+  .card.flipped .card-inner,
+  .card.matched .card-inner { transform: rotateY(180deg); }
+  .card-face, .card-back {
+    position:absolute; inset:0; backface-visibility:hidden; border-radius:10px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    box-shadow: 0 3px 7px var(--shadow);
+  }
+  /* 뒷면: 따뜻한 체크/물방울 패턴 */
+  .card-back {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255,255,255,.5) 0 14%, transparent 16%),
+      repeating-linear-gradient(45deg, var(--card-back-a) 0 9px, var(--card-back-b) 9px 18px);
+    border:3px solid #fff;
+  }
+  .card-back::after {
+    content:"♥"; font-size:18px; color:rgba(255,255,255,.85);
+    text-shadow:0 1px 2px rgba(180,80,110,.4);
+  }
+  /* 앞면: 비상식량 */
+  .card-face {
+    background: var(--card-face); border:3px solid var(--accent);
+    transform: rotateY(180deg); gap:3px; padding:3px;
+  }
+  .card-face .emoji { font-size: clamp(24px, 8vw, 38px); line-height:1; }
+  .card-face .label { font-size: clamp(9px, 2.6vw, 12px); font-weight:bold; color:var(--ink); }
+  .card.matched .card-face { border-color:var(--leaf); background:#f0fbef; }
+  .card.matched { animation: matchPop .4s ease; }
+  @keyframes matchPop { 0%{transform:scale(1);} 40%{transform:scale(1.08);} 100%{transform:scale(1);} }
+  .card.matched .card-inner { box-shadow:0 0 0 3px rgba(95,168,95,.4); border-radius:10px; }
+  .card.shake { animation: cardShake .35s; }
+  @keyframes cardShake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);} 75%{transform:translateX(4px);} }
+
+  /* ---------- 오버레이 공통 ---------- */
+  .overlay {
+    position:absolute; inset:0; z-index:10; border-radius:10px;
+    background: rgba(60,38,16,.72);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:22px; gap:14px;
+  }
+  .overlay.hidden { display:none; }
+
+  .scene-tag { color:#fff; font-size:12px; letter-spacing:2px; text-shadow:0 1px 3px rgba(0,0,0,.4); }
+
+  /* 목표: 여지혜의 메모지 */
+  .memo {
+    position:relative; max-width:300px; width:100%;
+    background-color:#fff6c4;  /* 불투명 노랑 (배경 비침 방지) */
+    background-image:
+      repeating-linear-gradient(0deg, transparent 0 23px, rgba(180,150,40,.16) 23px 24px),
+      linear-gradient(180deg, #fffbd4, #fff0a4);
+    color:var(--ink); padding:16px 16px 18px; text-align:left;
+    box-shadow: 5px 6px 16px rgba(0,0,0,.4);
+    transform: rotate(-1.4deg);
+    border:1px solid rgba(180,150,40,.25);
+  }
+  .memo::before { /* 메모지 상단 테이프 */
+    content:""; position:absolute; top:-9px; left:50%; transform:translateX(-50%) rotate(2deg);
+    width:64px; height:18px; background:rgba(255,255,255,.55);
+    border:1px solid rgba(180,150,40,.3); box-shadow:0 2px 3px rgba(0,0,0,.15);
+  }
+  .memo-title {
+    font-size:17px; font-weight:900; text-align:center; color:#d35400;
+    padding-bottom:9px; margin-bottom:9px; border-bottom:2px dashed rgba(160,110,40,.6);
+    text-shadow:0 1px 0 rgba(255,255,255,.6);
+  }
+  .memo-list { display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; font-size:13px; font-weight:bold; }
+  .memo-list div { display:flex; gap:6px; align-items:center; color:#4a3520; }
+  .memo-emoji { font-size:16px; flex:0 0 auto; width:20px; text-align:center; }
+  .memo-note {
+    font-size:12.5px; line-height:1.65; margin-top:13px; color:#5a3d18; font-weight:bold;
+    text-align:center; background:rgba(255,255,255,.5); border-radius:8px; padding:8px 10px;
+  }
+  .memo-note b { color:#d35400; }
+
+  /* 말풍선 (결과) */
+  .bubble {
+    position:relative; background:#fff; color:var(--ink);
+    border:3px solid var(--ink); border-radius:16px; padding:14px 18px;
+    max-width:290px; font-size:14px; line-height:1.55; font-weight:bold;
+    box-shadow: 4px 4px 0 rgba(74,53,32,.4);
+  }
+  .bubble::after {
+    content:""; position:absolute; bottom:-15px; left:38px;
+    border:9px solid transparent; border-top:13px solid var(--ink);
+  }
+  .bubble .who { display:block; font-size:11px; color:var(--accent); margin-bottom:3px; }
+  /* 결과 말풍선 등장 (도장 후 톡 올라옴) */
+  .bubble-hidden { opacity:0; transform: translateY(10px) scale(.96); }
+  .bubble.show { opacity:1; transform: translateY(0) scale(1); transition: all .28s cubic-bezier(.2,1.6,.4,1); }
+  /* 타이핑 커서 */
+  .caret { display:inline-block; width:.5em; color:var(--accent); font-weight:bold; animation: caretBlink .7s steps(1) infinite; }
+  .caret.done { display:none; }
+  @keyframes caretBlink { 50% { opacity:0; } }
+  /* 버튼 등장 (타이핑 끝난 뒤) */
+  .btn-hidden { opacity:0; transform: translateY(8px); pointer-events:none; }
+  .btn.show { opacity:1; transform: translateY(0); pointer-events:auto; transition: all .3s ease; }
+
+  /* 등급 도장 */
+  .stamp {
+    font-size:68px; font-weight:900; line-height:1;
+    border:6px solid; border-radius:14px; padding:8px 26px;
+    background:#ffffff;
+    box-shadow: 0 6px 16px rgba(0,0,0,.3);
+    transform: rotate(-10deg) scale(0);
+    animation: stampIn .35s cubic-bezier(.2,2.2,.4,1) .15s forwards;
+  }
+  @keyframes stampIn { to { transform: rotate(-10deg) scale(1); } }
+  .stamp.A { color:#2f9e44; border-color:#2f9e44; text-shadow:0 0 10px rgba(47,158,68,.3); }
+  .stamp.B { color:#1f7fd0; border-color:#1f7fd0; }
+  .stamp.C { color:#d68a00; border-color:#d68a00; }
+  .stamp.F { color:#d23f3f; border-color:#d23f3f; font-size:46px; }
+
+  /* 버튼 */
+  .btn {
+    font-family:inherit; font-size:15px; font-weight:bold; padding:10px 26px;
+    color:#fff; background: linear-gradient(180deg, #ffa055, var(--accent));
+    border:none; border-radius:24px; cursor:pointer;
+    box-shadow: 0 4px 0 var(--frame-dark), 0 6px 10px var(--shadow);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--frame-dark), 0 2px 5px var(--shadow); }
+
+  .confetti { position:absolute; inset:0; pointer-events:none; overflow:hidden; border-radius:10px; }
+</style>
+</head>
+<body>
+
+<div class="room">
+  <div class="room-inner">
+    <div class="topbar">
+      <div class="room-title"><span class="dot"></span>비상식량 정리</div>
+      <div class="pair-count" id="pairCount">0 / 10</div>
+    </div>
+
+    <div class="timer-row">
+      <div class="timer-num" id="timerNum">60.0</div>
+      <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <!-- 목표 화면 -->
+    <div class="overlay" id="ovIntro">
+      <div class="scene-tag">1999.12.31 밤 — 우리 집 거실</div>
+      <div class="memo">
+        <div class="memo-title">엄마의 비상식량 목록</div>
+        <div class="memo-list" id="memoList"></div>
+        <div class="memo-note">쏟아진 비상식량, 같은 것끼리 짝지어 정리하자!<br>카드를 뒤집어 <b>같은 물건</b>을 찾으면 돼.</div>
+      </div>
+      <button class="btn" id="btnStart">정리 시작 ▶</button>
+    </div>
+
+    <!-- 결과 화면 -->
+    <div class="overlay hidden" id="ovResult">
+      <div class="confetti" id="confetti"></div>
+      <div class="stamp" id="stamp">A</div>
+      <div class="bubble bubble-hidden" id="resultBubble">
+        <span class="who">여지혜</span><span id="resultText"></span><span class="caret" id="caret">▍</span>
+      </div>
+      <button class="btn btn-hidden" id="btnRetry">다시 정리하기 ↺</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==============================================================
+   CardGame — 미니게임 2: 카드 뒤집기
+   - 설정은 CONFIG에서 조정 (제한시간, 페어 수, 등급 경계)
+   - CardGame.onGameEnd(grade) : 'A'|'B'|'C'|'FAIL' → 스토리 엔진 연동
+   ============================================================== */
+
+const CONFIG = {
+  timeLimit: 60.0,            // 초
+  cols: 4,                    // 그리드 열 수 (20장 = 4×5)
+  items: [
+    { key:'ramen',      emoji:'🍜', label:'라면' },
+    { key:'water',      emoji:'💧', label:'생수' },
+    { key:'flashlight', emoji:'🔦', label:'손전등' },
+    { key:'battery',    emoji:'🔋', label:'건전지' },
+    { key:'can',        emoji:'🥫', label:'캔통조림' },
+    { key:'tissue',     emoji:'🧻', label:'휴지' },
+    { key:'lighter',    emoji:'🔥', label:'라이터' },
+    { key:'bag',        emoji:'🎒', label:'가방' },
+    { key:'medicine',   emoji:'💊', label:'응급약' },
+    { key:'map',        emoji:'🗺️', label:'지도' },
+  ],
+  // 등급: 클리어 시 잔여 시간(초) 기준. 미클리어(시간초과)는 무조건 FAIL.
+  // 클리어했다면 25+ → A, 13+ → B, 그 외(0~12초) → C
+  gradeOf: (remain, cleared) =>
+    !cleared ? 'FAIL' : remain >= 25 ? 'A' : remain >= 13 ? 'B' : 'C',
+};
+
+/* ---------- 유틸 ---------- */
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ---------- 사운드 (부드러운 톤) ---------- */
+const SFX = (() => {
+  let ctx = null;
+  const ac = () => ctx || (ctx = new (window.AudioContext || window.webkitAudioContext)());
+  function tone(freq, dur=0.12, type='sine', vol=0.06) {
+    try {
+      const a = ac();
+      if (a.state === 'suspended') a.resume();
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, a.currentTime);
+      g.gain.exponentialRampToValueAtTime(vol, a.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+      o.connect(g).connect(a.destination);
+      o.start(); o.stop(a.currentTime + dur);
+    } catch(e) {}
+  }
+  const unlock = () => { try { const a = ac(); if (a.state === 'suspended') a.resume(); } catch(e) {} };
+  document.addEventListener('pointerdown', unlock, { once: true });
+  document.addEventListener('touchstart', unlock, { once: true });
+  return {
+    flip:  () => tone(523, .08, 'triangle', .05),
+    match: () => { tone(659,.1,'sine',.06); setTimeout(()=>tone(880,.14,'sine',.06),90); },
+    miss:  () => tone(247, .16, 'sine', .05),
+    tick10:(f) => { tone(f,.1,'sine',.05); setTimeout(()=>tone(f*1.5,.12,'sine',.045),90); },
+    type:  () => tone(1200, .025, 'sine', .018),
+    clear: () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.18,'sine',.06), i*110)); },
+    fail:  () => { tone(330,.2,'sine',.05); setTimeout(()=>tone(247,.3,'sine',.05),180); },
+  };
+})();
+
+/* ---------- 게임 본체 ---------- */
+const CardGame = {
+  cards: [],          // {id, item, el, state}
+  first: null,        // 첫 번째로 뒤집은 카드
+  matched: 0,         // 맞춘 페어 수
+  timeLeft: 0,
+  ticking: null,
+  locked: false,
+  finished: false,
+  _typeTimer: null,
+  onGameEnd: grade => console.log('[CardGame] grade =', grade), // ★ 스토리 엔진 연동 지점
+
+  els: {
+    grid:       document.getElementById('grid'),
+    pairCount:  document.getElementById('pairCount'),
+    timerNum:   document.getElementById('timerNum'),
+    timerFill:  document.getElementById('timerFill'),
+    memoList:   document.getElementById('memoList'),
+    ovIntro:    document.getElementById('ovIntro'),
+    ovResult:   document.getElementById('ovResult'),
+    stamp:      document.getElementById('stamp'),
+    resultText: document.getElementById('resultText'),
+    bubble:     document.getElementById('resultBubble'),
+    caret:      document.getElementById('caret'),
+    btnRetry:   document.getElementById('btnRetry'),
+    confetti:   document.getElementById('confetti'),
+  },
+
+  init() {
+    // 목표 화면 메모 목록 채우기
+    this.els.memoList.innerHTML = CONFIG.items
+      .map(it => `<div><span class="memo-emoji">${it.emoji}</span>${it.label}</div>`)
+      .join('');
+  },
+
+  start() {
+    clearInterval(this.ticking);
+    clearTimeout(this._typeTimer);
+    this.timeLeft = CONFIG.timeLimit;
+    this.matched = 0;
+    this.first = null;
+    this.locked = false;
+    this.finished = false;
+    this.els.ovIntro.classList.add('hidden');
+    this.els.ovResult.classList.add('hidden');
+    this.buildBoard();
+    this.updateHUD();
+    this.ticking = setInterval(() => this.tick(), 100);
+  },
+
+  buildBoard() {
+    // 각 아이템 2장씩 → 셔플
+    const deck = [];
+    CONFIG.items.forEach((item, idx) => {
+      deck.push({ id: idx, item }); deck.push({ id: idx, item });
+    });
+    this.cards = shuffle(deck);
+
+    const g = this.els.grid;
+    g.style.gridTemplateColumns = `repeat(${CONFIG.cols}, 1fr)`;
+    g.innerHTML = '';
+    this.cards.forEach((card, i) => {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.innerHTML =
+        '<div class="card-inner">' +
+          '<div class="card-back"></div>' +
+          '<div class="card-face"><span class="emoji">' + card.item.emoji + '</span>' +
+            '<span class="label">' + card.item.label + '</span></div>' +
+        '</div>';
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); this.flip(i); });
+      card.el = el; card.state = 'down';
+      g.appendChild(el);
+    });
+  },
+
+  tick() {
+    const prev = this.timeLeft;
+    this.timeLeft = Math.max(0, this.timeLeft - 0.1);
+    // 10초 경계를 넘을 때마다 살짝 액션 (50, 40, 30, 20, 10초)
+    const prevMark = Math.ceil(prev / 10);
+    const nowMark = Math.ceil(this.timeLeft / 10);
+    if (nowMark < prevMark && this.timeLeft > 0) this.tenSecondPulse(nowMark * 10);
+    this.updateHUD();
+    if (this.timeLeft <= 0) this.finish(false);
+  },
+
+  /* 10초 단위 경과 시 타이머 바 펄스 + 카운트다운 톤 (긴장감) */
+  tenSecondPulse(remainMark) {
+    const row = this.els.timerNum.parentElement;
+    row.classList.remove('tenpulse');
+    void row.offsetWidth;
+    row.classList.add('tenpulse');
+    // 남은 시간이 적을수록 높은 음 (긴박)
+    SFX.tick10(remainMark <= 10 ? 660 : remainMark <= 20 ? 550 : 440);
+  },
+
+  updateHUD() {
+    const t = this.timeLeft, max = CONFIG.timeLimit;
+    this.els.timerNum.textContent = t.toFixed(1);
+    this.els.timerNum.classList.toggle('warn', t <= 10);
+    this.els.timerFill.style.width = (t / max * 100) + '%';
+    this.els.timerFill.classList.toggle('low', t <= 10);
+    this.els.pairCount.textContent = this.matched + ' / ' + CONFIG.items.length;
+  },
+
+  flip(i) {
+    if (this.locked) return;
+    const card = this.cards[i];
+    if (card.state !== 'down') return; // 이미 열렸거나 매칭됨
+
+    SFX.flip();
+    card.state = 'up';
+    card.el.classList.add('flipped');
+
+    if (!this.first) { this.first = card; return; }
+    if (this.first === card) return;
+
+    // 두 번째 카드 뒤집음 → 판정
+    this.locked = true;
+    const a = this.first, b = card;
+    this.first = null;
+
+    if (a.id === b.id) {
+      // 매칭 성공
+      setTimeout(() => {
+        a.state = b.state = 'matched';
+        a.el.classList.add('matched');
+        b.el.classList.add('matched');
+        a.el.classList.remove('flipped');
+        b.el.classList.remove('flipped');
+        SFX.match();
+        this.matched++;
+        this.updateHUD();
+        this.locked = false;
+        if (this.matched >= CONFIG.items.length) this.finish(true);
+      }, 320);
+    } else {
+      // 매칭 실패 → 잠깐 보여주고 다시 덮음
+      setTimeout(() => {
+        a.el.classList.add('shake');
+        b.el.classList.add('shake');
+        SFX.miss();
+      }, 320);
+      setTimeout(() => {
+        a.state = b.state = 'down';
+        a.el.classList.remove('flipped', 'shake');
+        b.el.classList.remove('flipped', 'shake');
+        this.locked = false;
+      }, 760);
+    }
+  },
+
+  finish(cleared) {
+    if (this.finished) return; // 중복 호출 방지 (시간만료 ↔ 마지막매칭 경합)
+    this.finished = true;
+    clearInterval(this.ticking);
+    this.locked = true;
+    const grade = CONFIG.gradeOf(this.timeLeft, cleared);
+    const MSG = {
+      A:    { cls:'A', stamp:'A',    text:'잘 정리 해놨네, 딸이랑 아빠랑 합이 좋은데?' },
+      B:    { cls:'B', stamp:'B',    text:'일단은... 뭐, 조금 뒤지면 찾겠지' },
+      C:    { cls:'C', stamp:'C',    text:'내가 없으면 안 되지? 다시 정리하자' },
+      FAIL: { cls:'F', stamp:'실패', text:'어휴 정신없어. 인주랑 나가있어!' },
+    }[grade];
+
+    if (cleared && grade === 'A') { SFX.clear(); this.burstConfetti(); }
+    else if (cleared) SFX.clear();
+    else SFX.fail();
+
+    // 1) 결과 화면 + 도장 등장 (말풍선·버튼은 숨김 상태)
+    this.els.stamp.textContent = MSG.stamp;
+    this.els.stamp.className = 'stamp ' + MSG.cls;
+    this.els.resultText.textContent = '';
+    this.els.bubble.classList.remove('show');
+    this.els.bubble.classList.add('bubble-hidden');
+    this.els.caret.classList.remove('done');
+    this.els.btnRetry.classList.remove('show');
+    this.els.btnRetry.classList.add('btn-hidden');
+    this.els.ovResult.classList.remove('hidden');
+
+    // 2) 도장 찍힌 뒤 → 말풍선 등장 → 타이핑 시작
+    clearTimeout(this._typeTimer);
+    setTimeout(() => {
+      this.els.bubble.classList.remove('bubble-hidden');
+      this.els.bubble.classList.add('show');
+      this.typeText('"' + MSG.text + '"');
+    }, 750);
+
+    this.onGameEnd(grade); // ★ 스토리 엔진으로 등급 전달
+  },
+
+  /* 결과 대사를 한 글자씩 타이핑 (채팅 입력 느낌). 끝나면 버튼 등장 */
+  typeText(text) {
+    let i = 0;
+    const speed = 55; // ms/글자
+    const step = () => {
+      this.els.resultText.textContent = text.slice(0, i);
+      if (i <= text.length) {
+        if (i < text.length) SFX.type();
+        i++;
+        this._typeTimer = setTimeout(step, speed);
+      } else {
+        this.els.caret.classList.add('done'); // 커서 숨김
+        this.els.btnRetry.classList.remove('btn-hidden');
+        this.els.btnRetry.classList.add('show');
+      }
+    };
+    step();
+  },
+
+  burstConfetti() {
+    const colors = ['#ff9eb5','#ffd0a6','#5fa85f','#3f8fd2','#e8743b','#ffe14b'];
+    const c = this.els.confetti;
+    c.innerHTML = '';
+    for (let i = 0; i < 28; i++) {
+      const p = document.createElement('div');
+      const size = 6 + Math.random()*7;
+      p.style.cssText =
+        'position:absolute;top:-12px;left:' + (Math.random()*100) + '%;' +
+        'width:' + size + 'px;height:' + size + 'px;border-radius:2px;' +
+        'background:' + colors[(Math.random()*colors.length)|0] + ';' +
+        'opacity:.95;transform:rotate(' + (Math.random()*360) + 'deg);' +
+        'animation:fall ' + (1.4+Math.random()*1.2) + 's linear ' + (Math.random()*0.5) + 's forwards;';
+      c.appendChild(p);
+    }
+  },
+};
+
+/* confetti 낙하 키프레임 (동적 주입) */
+(() => {
+  const s = document.createElement('style');
+  s.textContent = '@keyframes fall { to { top:108%; transform: rotate(720deg) translateX(' +
+    '20px); opacity:.2; } }';
+  document.head.appendChild(s);
+})();
+
+/* ---------- 이벤트 바인딩 (iOS 대응: click+pointerup+touchend) ---------- */
+function bindTap(id, handler) {
+  const el = document.getElementById(id);
+  if (!el) { console.warn('[bind] 요소 없음:', id); return; }
+  let fired = false;
+  const run = (e) => {
+    if (e) e.preventDefault();
+    if (fired) return;
+    fired = true;
+    setTimeout(() => { fired = false; }, 350);
+    handler();
+  };
+  el.addEventListener('click', run);
+  el.addEventListener('pointerup', run);
+  el.addEventListener('touchend', run, { passive: false });
+}
+
+CardGame.init();
+bindTap('btnStart', () => CardGame.start());
+bindTap('btnRetry', () => CardGame.start());
+</script>
+</body>
+</html>
